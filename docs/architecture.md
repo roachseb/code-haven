@@ -59,6 +59,7 @@ Consumer Repo                          Code Haven Templates
 ├── _quality.yml           # ✨ CodeClimate + SCC metrics + link check
 ├── _helm.yml              # ⎈ Helm lint + OCI package push
 ├── _pages.yml             # 📄 Aggregate reports → GitHub Pages
+├── _release.yml           # 🚀 Tag → Release + packaging + registry
 └── ci.yml                 # 🐕 Dog-fooding — this repo uses its own pipeline!
 
 actions/

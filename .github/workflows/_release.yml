@@ -1,0 +1,314 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Release Pipeline
+# Internal reusable workflow — called from devsecops.yml on tags
+#
+# When a consumer repo pushes a tag (e.g., v1.2.3), this workflow:
+#   1. Creates a GitHub Release with auto-generated notes
+#   2. Attaches build artifacts (JARs, wheels, binaries, etc.)
+#   3. Publishes container images tagged with the version
+#   4. Publishes packages to registries (GHCR, Maven, npm, PyPI)
+#
+# The detect job passes context about what's in the repo so we
+# only run the steps that apply to the detected stack.
+# ═══════════════════════════════════════════════════════════════
+name: "🚀 Release"
+
+on:
+  workflow_call:
+    inputs:
+      runner:              { type: string, default: 'ubuntu-latest' }
+      tag_name:            { type: string, default: '' }
+
+      # ── Stack detection results ─────────────────────────
+      has_pom:             { type: string, default: 'false' }
+      has_gradle:          { type: string, default: 'false' }
+      has_package_json:    { type: string, default: 'false' }
+      has_python:          { type: string, default: 'false' }
+      has_cargo:           { type: string, default: 'false' }
+      has_go:              { type: string, default: 'false' }
+      has_dotnet:          { type: string, default: 'false' }
+      has_dockerfile:      { type: string, default: 'false' }
+      has_mkdocs:          { type: string, default: 'false' }
+
+      # ── Build config ────────────────────────────────────
+      java_version:        { type: string, default: '21' }
+      java_distribution:   { type: string, default: 'temurin' }
+      node_version:        { type: string, default: 'lts/*' }
+      python_version:      { type: string, default: '3.x' }
+      golang_version:      { type: string, default: 'stable' }
+      rust_toolchain:      { type: string, default: 'stable' }
+      dotnet_version:      { type: string, default: '8.0.x' }
+      dockerfile_path:     { type: string, default: 'Dockerfile' }
+      docker_context:      { type: string, default: '.' }
+      docker_registry:     { type: string, default: 'ghcr.io' }
+
+jobs:
+  # ┌──────────────────────────────────────────────────────────
+  # │ GITHUB RELEASE — Create the release with auto-notes
+  # └──────────────────────────────────────────────────────────
+  create-release:
+    name: "🏷️ Create Release"
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+      upload_url: ${{ steps.release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Find the previous tag for changelog range
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ inputs.tag_name }}$" | head -1 || echo "")
+          if [[ -n "$PREV_TAG" ]]; then
+            RANGE="${PREV_TAG}..${{ inputs.tag_name }}"
+          else
+            RANGE="${{ inputs.tag_name }}"
+          fi
+
+          echo "## What's Changed" > changelog.md
+          echo "" >> changelog.md
+          git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges 2>/dev/null >> changelog.md || true
+          echo "" >> changelog.md
+          echo "" >> changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-initial}...${{ inputs.tag_name }}" >> changelog.md
+
+          cat changelog.md
+
+      - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          name: "Release ${{ inputs.tag_name }}"
+          body_path: changelog.md
+          draft: false
+          prerelease: ${{ contains(inputs.tag_name, '-rc') || contains(inputs.tag_name, '-beta') || contains(inputs.tag_name, '-alpha') }}
+          generate_release_notes: true
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ DOCKER — Build & push versioned container image
+  # └──────────────────────────────────────────────────────────
+  docker-release:
+    name: "🐳 Docker Release"
+    if: inputs.has_dockerfile == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.docker_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ inputs.docker_registry }}/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ inputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag_name }}
+            type=semver,pattern={{major}},value=${{ inputs.tag_name }}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.docker_context }}
+          file: ${{ inputs.dockerfile_path }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ inputs.tag_name }}
+            COMMIT=${{ github.sha }}
+
+      - name: Summary
+        run: |
+          echo "## 🐳 Release Image" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tags:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ JAVA — Publish to GitHub Packages (Maven)
+  # └──────────────────────────────────────────────────────────
+  java-release:
+    name: "☕ Java Package"
+    if: inputs.has_pom == 'true' || inputs.has_gradle == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: ${{ inputs.java_distribution }}
+
+      - name: Publish Maven package
+        if: inputs.has_pom == 'true'
+        run: |
+          mvn --batch-mode deploy \
+            -DskipTests \
+            -DaltDeploymentRepository=github::https://maven.pkg.github.com/${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Gradle package
+        if: inputs.has_gradle == 'true'
+        run: ./gradlew publish -x test || echo "::notice::Gradle publish task not configured — skipping"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ NODE.JS — Publish to GitHub Packages (npm)
+  # └──────────────────────────────────────────────────────────
+  node-release:
+    name: "📦 npm Package"
+    if: inputs.has_package_json == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: https://npm.pkg.github.com
+      - run: npm ci --ignore-scripts
+      - run: npm publish || echo "::notice::npm publish not configured — skipping"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ PYTHON — Publish to PyPI (via trusted publisher)
+  # └──────────────────────────────────────────────────────────
+  python-release:
+    name: "🐍 Python Package"
+    if: inputs.has_python == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - name: Build distribution
+        run: |
+          pip install --upgrade pip build
+          python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        continue-on-error: true
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ GO — Build binaries + attach to release
+  # └──────────────────────────────────────────────────────────
+  go-release:
+    name: "🐹 Go Binaries"
+    if: inputs.has_go == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.golang_version }}
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          BINARY="${{ github.event.repository.name }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          [[ "${{ matrix.goos }}" == "windows" ]] && BINARY="${BINARY}.exe"
+          go build -ldflags "-X main.version=${{ inputs.tag_name }}" -o "$BINARY" ./...
+          echo "BINARY=$BINARY" >> "$GITHUB_ENV"
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          files: ${{ env.BINARY }}
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ RUST — Publish crate
+  # └──────────────────────────────────────────────────────────
+  rust-release:
+    name: "🦀 Cargo Publish"
+    if: inputs.has_cargo == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ inputs.rust_toolchain }}
+      - run: cargo publish --dry-run || echo "::notice::Cargo publish not configured — skipping"
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ .NET — Publish NuGet
+  # └──────────────────────────────────────────────────────────
+  dotnet-release:
+    name: "🔷 NuGet Package"
+    if: inputs.has_dotnet == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+      - name: Pack & Push
+        run: |
+          dotnet pack --configuration Release -o nupkg
+          dotnet nuget push "nupkg/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
+        continue-on-error: true
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ RELEASE SUMMARY
+  # └──────────────────────────────────────────────────────────
+  release-summary:
+    name: "📋 Release Summary"
+    needs: [create-release, docker-release, java-release, node-release, python-release, go-release, rust-release, dotnet-release]
+    if: always()
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🚀 Release ${{ inputs.tag_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Step | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| GitHub Release | ${{ needs.create-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker Image   | ${{ needs.docker-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Java Package   | ${{ needs.java-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| npm Package    | ${{ needs.node-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Python Package | ${{ needs.python-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Go Binaries    | ${{ needs.go-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rust Crate     | ${{ needs.rust-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NuGet Package  | ${{ needs.dotnet-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"

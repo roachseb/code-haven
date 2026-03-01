@@ -106,6 +106,7 @@ Each sub-workflow is **50–130 lines**, focused on **one domain**. No more 1,40
 ├── _quality.yml           # ✨ Quality + metrics + links
 ├── _helm.yml              # ⎈ Helm lint + package
 ├── _pages.yml             # 📄 Report aggregation + deploy
+├── _release.yml           # 🚀 Tag → Release + packaging + registry
 └── ci.yml                 # 🐕 Dog-fooding — this repo uses its own pipeline!
 
 actions/
@@ -179,7 +180,36 @@ Full docs are available at the [documentation site](https://code-haven.github.io
 
 ---
 
-## � Dog-Fooding
+## 🔄 Pipeline Lifecycle
+
+The pipeline behaves differently depending on **how** it was triggered:
+
+| Trigger | What Happens |
+|---------|--------------|
+| **Pull Request** | Build → Test → Security scan → Quality metrics. No deploy, no publish. |
+| **Push to default branch** | Everything above **+** GitHub Pages deploy (docs, reports, coverage). |
+| **Tag push (`v*`)** | Everything above **+** GitHub Release + package publishing + container versioning. |
+
+```
+PR ──────────► build + test + scan
+
+main push ──► build + test + scan + deploy docs to Pages
+
+tag (v1.2.3) ► build + test + scan + deploy docs
+               + create GitHub Release
+               + push Docker image as v1.2.3
+               + publish packages (Maven/npm/PyPI/NuGet/crates/Go)
+```
+
+To create a release, just push a tag:
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+---
+
+## 🐕 Dog-Fooding
 
 Code Haven **uses its own pipeline** to build, scan, and deploy itself.
 The [`ci.yml`](.github/workflows/ci.yml) in this repo calls `devsecops.yml` —

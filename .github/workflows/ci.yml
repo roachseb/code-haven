@@ -4,21 +4,34 @@
 # This project IS the pipeline framework, so it USES its own
 # devsecops.yml orchestrator to build, scan, and deploy itself.
 #
-# What happens when this runs:
-#   1. Template-specific lints (YAML + Action syntax)
-#   2. devsecops.yml kicks in, auto-detects mkdocs.yml
-#      → builds the documentation site
-#      → runs Gitleaks, CodeQL, Trivy, KICS, Lychee, SCC
-#      → deploys to GitHub Pages on main
-#
-# If you're looking for an example of "how do I consume
-# Code Haven in my own repo?", this file IS that example.
+# ┌────────────────────────────────────────────────────────────
+# │ Lifecycle:
+# │
+# │  Push to main/master:
+# │    → yaml-lint + actionlint (template-specific gates)
+# │    → devsecops.yml auto-detects mkdocs.yml
+# │      → builds docs, runs security/quality scans
+# │      → deploys documentation to GitHub Pages
+# │
+# │  Pull Request:
+# │    → same as above, minus Pages deploy
+# │
+# │  Tag push (v*):
+# │    → same as above, PLUS:
+# │      → creates GitHub Release with auto-changelog
+# │      → packages & publishes based on detected stack
+# │      → tags container images with semver
+# │
+# │  If you're looking for an example of "how do I consume
+# │  Code Haven in my own repo?", this file IS that example.
+# └────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════
 name: CI
 
 on:
   push:
     branches: [main, master, 'feat/**']
+    tags: ['v*', '[0-9]+.[0-9]+.[0-9]+*']
   pull_request:
     branches: [main, master]
 
@@ -27,19 +40,15 @@ concurrency:
   cancel-in-progress: true
 
 # ─── Permissions ────────────────────────────────────────────
-# Broad enough for every sub-workflow the pipeline delegates to:
-#   pages + id-token  → _pages.yml  (GitHub Pages deploy)
-#   security-events   → _security.yml  (CodeQL upload)
-#   actions           → _security.yml  (CodeQL analysis)
-#   packages          → (reserved for future Docker image)
-#   contents          → checkout
+# Must be the UNION of all permissions any sub-workflow needs.
+# GitHub Actions doesn't grant what you don't ask for here.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-  security-events: write
-  actions: read
-  packages: write   # required by _docker.yml → docker-build (GHCR push)
+  contents: write      # checkout + GitHub Release creation
+  pages: write         # _pages.yml → GitHub Pages deploy
+  id-token: write      # _pages.yml + PyPI trusted publisher
+  security-events: write  # _security.yml → CodeQL SARIF upload
+  actions: read        # _security.yml → CodeQL analysis
+  packages: write      # _docker.yml + _release.yml → GHCR push
 
 jobs:
 
@@ -83,15 +92,17 @@ jobs:
   #    • run Gitleaks, CodeQL, Trivy, KICS (Security sub-workflow)
   #    • compute code metrics via SCC (Quality sub-workflow)
   #    • deploy documentation to GitHub Pages (Pages sub-workflow)
+  #    • on tag push: create GitHub Release (Release sub-workflow)
   #
   pipeline:
     needs: [yaml-lint, actionlint]
+    if: always() && !cancelled()
     uses: ./.github/workflows/devsecops.yml
     permissions:
-      contents: read
-      pages: write
-      id-token: write
-      security-events: write
-      actions: read
-      packages: write   # required by _docker.yml → docker-build (GHCR push)
+      contents: write        # checkout + GitHub Release creation
+      pages: write           # GitHub Pages deploy
+      id-token: write        # Pages + PyPI trusted publisher
+      security-events: write # CodeQL SARIF upload
+      actions: read          # CodeQL analysis
+      packages: write        # GHCR push
     secrets: inherit

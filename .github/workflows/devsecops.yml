@@ -27,7 +27,8 @@ name: DevSecOps
 #   ├── _security.yml        CodeQL + Gitleaks + Trivy + KICS + Sonar + Checkmarx
 #   ├── _quality.yml         CodeClimate + SCC + link check
 #   ├── _helm.yml            Helm lint + package
-#   └── _pages.yml           Aggregate reports → GitHub Pages
+#   ├── _pages.yml           Aggregate reports → GitHub Pages
+#   └── _release.yml         Tag → GitHub Release + packaging + registry
 # ═══════════════════════════════════════════════════════════════
 
 on:
@@ -162,8 +163,44 @@ jobs:
       has_django:         ${{ steps.check.outputs.has_django }}
       has_twig:           ${{ steps.check.outputs.has_twig }}
       package_manager:    ${{ steps.check.outputs.package_manager }}
+      is_default_branch:  ${{ steps.context.outputs.is_default_branch }}
+      is_tag:             ${{ steps.context.outputs.is_tag }}
+      is_pr:              ${{ steps.context.outputs.is_pr }}
+      tag_name:           ${{ steps.context.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Detect ref context
+        id: context
+        run: |
+          # What kind of event triggered this?
+          REF="$GITHUB_REF"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          [[ -z "$DEFAULT_BRANCH" ]] && DEFAULT_BRANCH="main"
+
+          IS_DEFAULT_BRANCH="false"
+          IS_TAG="false"
+          IS_PR="false"
+          TAG_NAME=""
+
+          if [[ "$REF" == refs/tags/* ]]; then
+            IS_TAG="true"
+            TAG_NAME="${REF#refs/tags/}"
+          elif [[ "$REF" == refs/pull/* ]]; then
+            IS_PR="true"
+          elif [[ "$REF" == "refs/heads/$DEFAULT_BRANCH" ]]; then
+            IS_DEFAULT_BRANCH="true"
+          fi
+
+          {
+            echo "is_default_branch=$IS_DEFAULT_BRANCH"
+            echo "is_tag=$IS_TAG"
+            echo "is_pr=$IS_PR"
+            echo "tag_name=$TAG_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "📌 Ref: $REF | Default branch: $DEFAULT_BRANCH"
+          echo "   is_default_branch=$IS_DEFAULT_BRANCH | is_tag=$IS_TAG | is_pr=$IS_PR | tag_name=$TAG_NAME"
 
       - name: Detect project files
         id: check
@@ -204,9 +241,38 @@ jobs:
         run: |
           echo "## 🔍 Stack Detection" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📌 Lifecycle Context" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Ref** | \`$GITHUB_REF\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Default branch** | ${{ steps.context.outputs.is_default_branch }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Tag** | ${{ steps.context.outputs.is_tag }} (\`${{ steps.context.outputs.tag_name }}\`) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Pull Request** | ${{ steps.context.outputs.is_pr }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 🧰 Detected Stack" >> "$GITHUB_STEP_SUMMARY"
           echo "| Check | Result |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          cat "$GITHUB_OUTPUT" | while IFS='=' read -r key val; do
+          cat <<'EOF' | while IFS='=' read -r key val; do
+          has_pom=${{ steps.check.outputs.has_pom }}
+          has_gradle=${{ steps.check.outputs.has_gradle }}
+          has_package_json=${{ steps.check.outputs.has_package_json }}
+          has_angular=${{ steps.check.outputs.has_angular }}
+          has_cargo=${{ steps.check.outputs.has_cargo }}
+          has_go=${{ steps.check.outputs.has_go }}
+          has_python=${{ steps.check.outputs.has_python }}
+          has_dotnet=${{ steps.check.outputs.has_dotnet }}
+          has_php=${{ steps.check.outputs.has_php }}
+          has_dockerfile=${{ steps.check.outputs.has_dockerfile }}
+          has_helm=${{ steps.check.outputs.has_helm }}
+          has_mkdocs=${{ steps.check.outputs.has_mkdocs }}
+          has_sql=${{ steps.check.outputs.has_sql }}
+          has_hurl=${{ steps.check.outputs.has_hurl }}
+          has_cypress=${{ steps.check.outputs.has_cypress }}
+          has_playwright=${{ steps.check.outputs.has_playwright }}
+          has_tox=${{ steps.check.outputs.has_tox }}
+          has_django=${{ steps.check.outputs.has_django }}
+          has_twig=${{ steps.check.outputs.has_twig }}
+          EOF
             [[ "$val" == "true" ]] && icon="✅" || icon="⬜"
             echo "| \`$key\` | $icon $val |" >> "$GITHUB_STEP_SUMMARY"
           done
@@ -317,6 +383,10 @@ jobs:
   docker:
     needs: detect
     if: needs.detect.outputs.has_dockerfile == 'true' && !inputs.docker_disabled
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     uses: ./.github/workflows/_docker.yml
     with:
       runner:                 ${{ inputs.runner }}
@@ -362,6 +432,10 @@ jobs:
   security:
     needs: [detect, java, node, python, go, rust, dotnet, php]
     if: always()
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     uses: ./.github/workflows/_security.yml
     with:
       runner:                     ${{ inputs.runner }}
@@ -415,10 +489,54 @@ jobs:
   # ═══════════════════════════════════════════════════════════
 
   pages:
-    needs: [java, node, python, go, rust, dotnet, php, docker, e2e, security, quality, helm]
+    needs: [detect, java, node, python, go, rust, dotnet, php, docker, e2e, security, quality, helm]
     if: always() && !inputs.pages_disabled
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     uses: ./.github/workflows/_pages.yml
     with:
-      runner:         ${{ inputs.runner }}
-      pages_disabled: ${{ inputs.pages_disabled }}
+      runner:            ${{ inputs.runner }}
+      pages_disabled:    ${{ inputs.pages_disabled }}
+      is_default_branch: ${{ needs.detect.outputs.is_default_branch }}
+      is_tag:            ${{ needs.detect.outputs.is_tag }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   RELEASE — Only on tag pushes (v*)
+  # ═══════════════════════════════════════════════════════════
+
+  release:
+    needs: [detect, java, node, python, go, rust, dotnet, php, docker, security]
+    if: >-
+      always()
+      && needs.detect.outputs.is_tag == 'true'
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/_release.yml
+    with:
+      runner:            ${{ inputs.runner }}
+      tag_name:          ${{ needs.detect.outputs.tag_name }}
+      has_pom:           ${{ needs.detect.outputs.has_pom }}
+      has_gradle:        ${{ needs.detect.outputs.has_gradle }}
+      has_package_json:  ${{ needs.detect.outputs.has_package_json }}
+      has_python:        ${{ needs.detect.outputs.has_python }}
+      has_cargo:         ${{ needs.detect.outputs.has_cargo }}
+      has_go:            ${{ needs.detect.outputs.has_go }}
+      has_dotnet:        ${{ needs.detect.outputs.has_dotnet }}
+      has_dockerfile:    ${{ needs.detect.outputs.has_dockerfile }}
+      has_mkdocs:        ${{ needs.detect.outputs.has_mkdocs }}
+      java_version:      ${{ inputs.java_version }}
+      java_distribution: ${{ inputs.java_distribution }}
+      node_version:      ${{ inputs.node_version }}
+      python_version:    ${{ inputs.python_version }}
+      golang_version:    ${{ inputs.golang_version }}
+      rust_toolchain:    ${{ inputs.rust_toolchain }}
+      dotnet_version:    ${{ inputs.dotnet_version }}
+      dockerfile_path:   ${{ inputs.dockerfile_path }}
+      docker_context:    ${{ inputs.docker_context }}
+      docker_registry:   ${{ inputs.docker_registry }}
     secrets: inherit
