@@ -59,3 +59,4 @@ That's it. The pipeline will:
 - [Configuration](configuration.md) — All inputs, secrets, and toggles
 - [Examples](examples.md) — Real-world pipeline configurations
 - [Migration Guide](migration.md) — Coming from GitLab CI?
+- [Project Review](review.md) — Independent audit notes and improvement roadmap
