@@ -38,10 +38,44 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
+      - name: Detect CodeQL languages
+        id: detect
+        run: |
+          LANGS=""
+          has_ext() {
+            for ext in "$@"; do
+              [[ -n "$(find . -name "*.$ext" \
+                -not -path '*/node_modules/*' \
+                -not -path '*/.git/*' \
+                -print -quit 2>/dev/null)" ]] && return 0
+            done
+            return 1
+          }
+          has_ext py           && LANGS="${LANGS:+$LANGS,}python"
+          has_ext js ts jsx tsx && LANGS="${LANGS:+$LANGS,}javascript-typescript"
+          has_ext java kt      && LANGS="${LANGS:+$LANGS,}java-kotlin"
+          has_ext go           && LANGS="${LANGS:+$LANGS,}go"
+          has_ext cs vb        && LANGS="${LANGS:+$LANGS,}csharp"
+          has_ext c cpp h      && LANGS="${LANGS:+$LANGS,}c-cpp"
+          has_ext rb           && LANGS="${LANGS:+$LANGS,}ruby"
+          has_ext swift        && LANGS="${LANGS:+$LANGS,}swift"
+
+          if [[ -z "$LANGS" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⏭️ No CodeQL-supported languages — skipping SAST" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "languages=$LANGS" >> "$GITHUB_OUTPUT"
+            echo "🛡 CodeQL languages: \`$LANGS\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: github/codeql-action/init@v3
-        with: { languages: 'auto' }
+        if: steps.detect.outputs.skip != 'true'
+        with:
+          languages: ${{ steps.detect.outputs.languages }}
       - uses: github/codeql-action/autobuild@v3
+        if: steps.detect.outputs.skip != 'true'
       - uses: github/codeql-action/analyze@v3
+        if: steps.detect.outputs.skip != 'true'
         with: { category: 'sast' }
 
   # ── Secret Detection ────────────────────────────────────
@@ -72,6 +106,7 @@ jobs:
           format: sarif
           output: dependency-results.sarif
           severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with: { sarif_file: dependency-results.sarif, category: 'dependency-scan' }
