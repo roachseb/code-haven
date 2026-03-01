@@ -106,7 +106,7 @@ Each sub-workflow is **50–130 lines**, focused on **one domain**. No more 1,40
 ├── _quality.yml           # ✨ Quality + metrics + links
 ├── _helm.yml              # ⎈ Helm lint + package
 ├── _pages.yml             # 📄 Report aggregation + deploy
-└── docs.yml               # 📚 Documentation site deploy
+└── ci.yml                 # 🐕 Dog-fooding — this repo uses its own pipeline!
 
 actions/
 ├── toolkit/               # 🔧 Environment init (CA certs, debug)
@@ -179,7 +179,30 @@ Full docs are available at the [documentation site](https://code-haven.github.io
 
 ---
 
-## 🔀 Coming from GitLab?
+## � Dog-Fooding
+
+Code Haven **uses its own pipeline** to build, scan, and deploy itself.
+The [`ci.yml`](.github/workflows/ci.yml) in this repo calls `devsecops.yml` —
+the exact same entry point every consumer uses:
+
+```yaml
+# .github/workflows/ci.yml (simplified)
+jobs:
+  yaml-lint: ...            # Template-specific: validate YAML syntax
+  actionlint: ...           # Template-specific: validate action syntax
+
+  pipeline:
+    needs: [yaml-lint, actionlint]
+    uses: ./.github/workflows/devsecops.yml   # 🐕 Eating our own dog food
+    secrets: inherit
+```
+
+The orchestrator detects `mkdocs.yml`, builds the documentation, runs security
+scans, and deploys to GitHub Pages — all through the same system your repos use.
+
+---
+
+## �🔀 Coming from GitLab?
 
 This project is the GitHub Actions equivalent of the Code Haven Farm GitLab CI templates. See the [Migration Guide](docs/migration.md) and [MIGRATION-REPORT.md](MIGRATION-REPORT.md) for the full mapping.
 

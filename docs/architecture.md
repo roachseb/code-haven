@@ -59,7 +59,7 @@ Consumer Repo                          Code Haven Templates
 ├── _quality.yml           # ✨ CodeClimate + SCC metrics + link check
 ├── _helm.yml              # ⎈ Helm lint + OCI package push
 ├── _pages.yml             # 📄 Aggregate reports → GitHub Pages
-└── docs.yml               # 📚 Deploy this documentation site
+└── ci.yml                 # 🐕 Dog-fooding — this repo uses its own pipeline!
 
 actions/
 ├── toolkit/               # 🔧 Environment init (CA certs, debug, scripts)
@@ -93,6 +93,33 @@ Level 4:  (reserved)
 ```
 
 We use 2 levels, leaving headroom for future composition.
+
+## Dog-Fooding 🐕
+
+Code Haven uses its own pipeline to build and deploy itself. The repo's
+[`ci.yml`](https://github.com/code-haven/code-haven/blob/main/.github/workflows/ci.yml)
+calls `devsecops.yml` — the exact same orchestrator every consumer uses.
+
+When the pipeline runs on this repo, the detect step finds `mkdocs.yml` and
+triggers the Python sub-workflow (MkDocs build), then security scans (Gitleaks,
+CodeQL), quality checks (link check, code metrics), and finally deploys the
+documentation site to GitHub Pages.
+
+This is deliberate: the best way to verify a pipeline framework works is to
+run it on itself. If Code Haven breaks Code Haven, we know immediately.
+
+```
+ci.yml  (push / PR trigger)
+  ├── yaml-lint          ← Template-specific
+  ├── actionlint         ← Template-specific
+  └── pipeline
+        └── devsecops.yml  (same orchestrator consumers call)
+              ├── detect     → finds mkdocs.yml
+              ├── python     → builds docs
+              ├── security   → Gitleaks, CodeQL, Trivy, KICS
+              ├── quality    → link check, SCC metrics
+              └── pages      → deploys to GitHub Pages
+```
 
 ## Job Dependencies
 

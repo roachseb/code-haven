@@ -1,0 +1,8 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Documentation Dependencies
+# Used by the pipeline (devsecops.yml → _build-python.yml)
+# to build the MkDocs documentation site.
+# ═══════════════════════════════════════════════════════════════
+mkdocs-material>=9.5
+mkdocs-minify-plugin>=0.8
+pymdown-extensions>=10.0
