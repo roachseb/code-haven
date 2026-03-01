@@ -1,0 +1,127 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Node.js / Angular Build Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "📦 Node"
+
+on:
+  workflow_call:
+    inputs:
+      runner:           { type: string, default: 'ubuntu-latest' }
+      has_angular:      { type: string, default: 'false' }
+      npm_disabled:     { type: boolean, default: false }
+      angular_disabled: { type: boolean, default: false }
+      node_version:     { type: string, default: 'lts/*' }
+      node_build_args:  { type: string, default: 'run build' }
+      node_test_args:   { type: string, default: 'run test' }
+      package_manager:  { type: string, default: 'npm' }
+
+jobs:
+  # ── Install ──────────────────────────────────────────────
+  npm-install:
+    name: "📦 Node Install"
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        if: inputs.package_manager == 'pnpm'
+        with: { run_install: false }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: ${{ inputs.package_manager }}
+      - name: Install
+        run: |
+          case "${{ inputs.package_manager }}" in
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --frozen-lockfile ;;
+            npm)  [[ -f package-lock.json ]] && npm ci || npm install ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-modules
+          path: node_modules
+          retention-days: 1
+
+  # ── Generic Node Build & Test ────────────────────────────
+  npm-build:
+    name: "📦 Node Build"
+    needs: npm-install
+    if: inputs.has_angular != 'true' && !inputs.npm_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ inputs.node_version }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+      - run: npm ${{ inputs.node_build_args }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-dist
+          path: |
+            dist
+            build
+          retention-days: 1
+
+  npm-test:
+    name: "📦 Node Test"
+    needs: npm-install
+    if: inputs.has_angular != 'true' && !inputs.npm_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ inputs.node_version }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+      - run: npm ${{ inputs.node_test_args }}
+
+  # ── Angular ──────────────────────────────────────────────
+  angular-build:
+    name: "🅰 Angular Build"
+    needs: npm-install
+    if: inputs.has_angular == 'true' && !inputs.angular_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ inputs.node_version }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+      - run: npx ng build --configuration production
+      - uses: actions/upload-artifact@v4
+        with: { name: angular-dist, path: dist, retention-days: 1 }
+
+  angular-test:
+    name: "🅰 Angular Test"
+    needs: npm-install
+    if: inputs.has_angular == 'true' && !inputs.angular_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ inputs.node_version }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+      - run: npx ng test --watch=false --browsers=ChromeHeadless --code-coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: angular-coverage
+          path: coverage
+          retention-days: 7
+
+  angular-lint:
+    name: "🅰 Angular Lint"
+    needs: npm-install
+    if: inputs.has_angular == 'true' && !inputs.angular_disabled
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ inputs.node_version }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+      - run: npx ng lint

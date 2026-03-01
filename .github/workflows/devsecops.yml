@@ -1,0 +1,424 @@
+name: DevSecOps
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Reusable CI/CD Orchestrator for GitHub Actions
+#
+# This is the ONLY file consumer repos need to call.
+# It auto-detects your stack, then delegates to domain-specific
+# workflows for build, test, security, and deploy.
+#
+# Consumer repos call this with ONE line:
+#
+#   jobs:
+#     ci:
+#       uses: code-haven/.github/workflows/devsecops.yml@main
+#       secrets: inherit
+#
+# Architecture:
+#   devsecops.yml (this file — orchestrator)
+#   ├── _build-java.yml      Maven + Gradle
+#   ├── _build-node.yml      npm + Angular
+#   ├── _build-python.yml    Python + Django + MkDocs + PyPI
+#   ├── _build-go.yml        Go build/test/lint/fmt/vet
+#   ├── _build-rust.yml      Rust build/test/fmt/clippy/doc
+#   ├── _build-dotnet.yml    .NET build/test/format/publish
+#   ├── _build-php.yml       PHP test + Twig lint
+#   ├── _docker.yml          Docker build + Hadolint + Trivy
+#   ├── _test-e2e.yml        Cypress + Playwright + Hurl
+#   ├── _security.yml        CodeQL + Gitleaks + Trivy + KICS + Sonar + Checkmarx
+#   ├── _quality.yml         CodeClimate + SCC + link check
+#   ├── _helm.yml            Helm lint + package
+#   └── _pages.yml           Aggregate reports → GitHub Pages
+# ═══════════════════════════════════════════════════════════════
+
+on:
+  workflow_call:
+    inputs:
+      # ── Global ──────────────────────────────────────────
+      runner:
+        description: 'GitHub-hosted or self-hosted runner label'
+        type: string
+        default: 'ubuntu-latest'
+      debug:
+        description: 'Enable debug logging'
+        type: boolean
+        default: false
+
+      # ── Language / Feature toggles ──────────────────────
+      maven_disabled:       { type: boolean, default: false }
+      gradle_disabled:      { type: boolean, default: false }
+      npm_disabled:         { type: boolean, default: false }
+      angular_disabled:     { type: boolean, default: false }
+      python_disabled:      { type: boolean, default: false }
+      golang_disabled:      { type: boolean, default: false }
+      rust_disabled:        { type: boolean, default: false }
+      dotnet_disabled:      { type: boolean, default: false }
+      php_disabled:         { type: boolean, default: false }
+      docker_disabled:      { type: boolean, default: false }
+      helm_disabled:        { type: boolean, default: false }
+      cypress_disabled:     { type: boolean, default: false }
+      playwright_disabled:  { type: boolean, default: false }
+      hurl_disabled:        { type: boolean, default: false }
+      pages_disabled:       { type: boolean, default: false }
+
+      # ── Security toggles ───────────────────────────────
+      sast_disabled:              { type: boolean, default: false }
+      secret_detection_disabled:  { type: boolean, default: false }
+      dependency_scan_disabled:   { type: boolean, default: false }
+      container_scan_disabled:    { type: boolean, default: false }
+      iac_scan_disabled:          { type: boolean, default: false }
+      sonar_disabled:             { type: boolean, default: false }
+      checkmarx_disabled:         { type: boolean, default: false }
+      sqlfluff_disabled:          { type: boolean, default: false }
+      links_check_disabled:       { type: boolean, default: false }
+      code_quality_disabled:      { type: boolean, default: false }
+      code_metrics_disabled:      { type: boolean, default: false }
+      hadolint_disabled:          { type: boolean, default: false }
+
+      # ── Java / Maven ───────────────────────────────────
+      java_version:       { type: string, default: '21' }
+      java_distribution:  { type: string, default: 'temurin' }
+      maven_cli_opts:     { type: string, default: '--batch-mode --errors --fail-at-end --show-version' }
+      maven_build_cmd:    { type: string, default: 'install' }
+      java_formatter:     { type: string, default: 'revelc' }
+      gradle_build_cmd:   { type: string, default: 'build' }
+
+      # ── Node.js ─────────────────────────────────────────
+      node_version:       { type: string, default: 'lts/*' }
+      node_build_args:    { type: string, default: 'run build' }
+      node_test_args:     { type: string, default: 'run test' }
+
+      # ── Python ──────────────────────────────────────────
+      python_version:     { type: string, default: '3.x' }
+
+      # ── Go / Rust / .NET / PHP ──────────────────────────
+      golang_version:     { type: string, default: 'stable' }
+      rust_toolchain:     { type: string, default: 'stable' }
+      dotnet_version:     { type: string, default: '8.0.x' }
+      php_version:        { type: string, default: '8.3' }
+      php_extensions:     { type: string, default: 'mbstring, xml, xdebug' }
+
+      # ── Docker ──────────────────────────────────────────
+      dockerfile_path:    { type: string, default: 'Dockerfile' }
+      docker_context:     { type: string, default: '.' }
+      docker_tag_extra:   { type: string, default: 'latest' }
+      docker_registry:    { type: string, default: 'ghcr.io' }
+
+      # ── Helm / K8s ─────────────────────────────────────
+      helm_chart_path:    { type: string, default: '.' }
+      helm_values_files:  { type: string, default: 'values.yaml' }
+      k8s_namespace:      { type: string, default: '' }
+
+      # ── Security Tools ─────────────────────────────────
+      sonar_host_url:     { type: string, default: '' }
+      sonar_project_key:  { type: string, default: '' }
+      checkmarx_base_url: { type: string, default: '' }
+      sqlfluff_dialect:   { type: string, default: 'ansi' }
+      hurl_extra_args:    { type: string, default: '' }
+      cypress_browsers:   { type: string, default: 'chrome' }
+
+    secrets:
+      SONAR_TOKEN:          { required: false }
+      CHECKMARX_TOKEN:      { required: false }
+      CHECKMARX_USERNAME:   { required: false }
+      CHECKMARX_PASSWORD:   { required: false }
+      KUBE_CONFIG:          { required: false }
+      AWS_ROLE_ARN:         { required: false }
+      CC_TEST_REPORTER_ID:  { required: false }
+      CYPRESS_RECORD_KEY:   { required: false }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ═══════════════════════════════════════════════════════════════
+# JOBS — Detect stack, then delegate to domain workflows
+# ═══════════════════════════════════════════════════════════════
+jobs:
+
+  # ┌──────────────────────────────────────────────────────────
+  # │ DETECT — Scan the repo to figure out what's present
+  # └──────────────────────────────────────────────────────────
+  detect:
+    name: "🔍 Detect Stack"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      has_pom:            ${{ steps.check.outputs.has_pom }}
+      has_gradle:         ${{ steps.check.outputs.has_gradle }}
+      has_package_json:   ${{ steps.check.outputs.has_package_json }}
+      has_angular:        ${{ steps.check.outputs.has_angular }}
+      has_cargo:          ${{ steps.check.outputs.has_cargo }}
+      has_go:             ${{ steps.check.outputs.has_go }}
+      has_python:         ${{ steps.check.outputs.has_python }}
+      has_dotnet:         ${{ steps.check.outputs.has_dotnet }}
+      has_php:            ${{ steps.check.outputs.has_php }}
+      has_dockerfile:     ${{ steps.check.outputs.has_dockerfile }}
+      has_helm:           ${{ steps.check.outputs.has_helm }}
+      has_mkdocs:         ${{ steps.check.outputs.has_mkdocs }}
+      has_sql:            ${{ steps.check.outputs.has_sql }}
+      has_hurl:           ${{ steps.check.outputs.has_hurl }}
+      has_cypress:        ${{ steps.check.outputs.has_cypress }}
+      has_playwright:     ${{ steps.check.outputs.has_playwright }}
+      has_tox:            ${{ steps.check.outputs.has_tox }}
+      has_django:         ${{ steps.check.outputs.has_django }}
+      has_twig:           ${{ steps.check.outputs.has_twig }}
+      package_manager:    ${{ steps.check.outputs.package_manager }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect project files
+        id: check
+        run: |
+          check_glob() { [[ -n "$(find . -maxdepth 4 -name "$1" -print -quit 2>/dev/null)" ]] && echo "true" || echo "false"; }
+          check_file() { [[ -f "$1" ]] && echo "true" || echo "false"; }
+          check_any()  { for f in "$@"; do [[ -f "$f" ]] && echo "true" && return; done; echo "false"; }
+
+          {
+            echo "has_pom=$(check_file pom.xml)"
+            echo "has_gradle=$(check_any build.gradle build.gradle.kts)"
+            echo "has_package_json=$(check_file package.json)"
+            echo "has_angular=$(check_file angular.json)"
+            echo "has_cargo=$(check_file Cargo.lock)"
+            echo "has_go=$(check_glob '*.go')"
+            echo "has_python=$(check_any setup.py pyproject.toml)"
+            echo "has_dotnet=$([[ -n "$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.csproj' \) -print -quit)" ]] && echo true || echo false)"
+            echo "has_php=$(check_glob '*phpunit*')"
+            echo "has_dockerfile=$(check_file ${{ inputs.dockerfile_path }})"
+            echo "has_helm=$(check_file .helmignore)"
+            echo "has_mkdocs=$(check_glob 'mkdocs.yml')"
+            echo "has_sql=$(check_glob '*.sql')"
+            echo "has_hurl=$(check_glob '*.hurl')"
+            echo "has_cypress=$(check_glob 'cypress.config.*')"
+            echo "has_playwright=$(check_glob 'playwright.config.*')"
+            echo "has_tox=$(check_any tox.ini tox.toml)"
+            echo "has_django=$(check_file manage.py)"
+            echo "has_twig=$(check_glob '*.twig')"
+          } >> "$GITHUB_OUTPUT"
+
+          # Detect Node package manager
+          if [[ -f pnpm-lock.yaml ]]; then PM=pnpm
+          elif [[ -f yarn.lock ]]; then PM=yarn
+          else PM=npm; fi
+          echo "package_manager=$PM" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          echo "## 🔍 Stack Detection" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_OUTPUT" | while IFS='=' read -r key val; do
+            [[ "$val" == "true" ]] && icon="✅" || icon="⬜"
+            echo "| \`$key\` | $icon $val |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ═══════════════════════════════════════════════════════════
+  #   BUILD — Language-specific pipelines
+  # ═══════════════════════════════════════════════════════════
+
+  java:
+    needs: detect
+    if: >-
+      needs.detect.outputs.has_pom == 'true' ||
+      needs.detect.outputs.has_gradle == 'true'
+    uses: ./.github/workflows/_build-java.yml
+    with:
+      runner:            ${{ inputs.runner }}
+      has_pom:           ${{ needs.detect.outputs.has_pom }}
+      has_gradle:        ${{ needs.detect.outputs.has_gradle }}
+      maven_disabled:    ${{ inputs.maven_disabled }}
+      gradle_disabled:   ${{ inputs.gradle_disabled }}
+      java_version:      ${{ inputs.java_version }}
+      java_distribution: ${{ inputs.java_distribution }}
+      maven_cli_opts:    ${{ inputs.maven_cli_opts }}
+      maven_build_cmd:   ${{ inputs.maven_build_cmd }}
+      java_formatter:    ${{ inputs.java_formatter }}
+      gradle_build_cmd:  ${{ inputs.gradle_build_cmd }}
+    secrets: inherit
+
+  node:
+    needs: detect
+    if: needs.detect.outputs.has_package_json == 'true' && !inputs.npm_disabled
+    uses: ./.github/workflows/_build-node.yml
+    with:
+      runner:           ${{ inputs.runner }}
+      has_angular:      ${{ needs.detect.outputs.has_angular }}
+      npm_disabled:     ${{ inputs.npm_disabled }}
+      angular_disabled: ${{ inputs.angular_disabled }}
+      node_version:     ${{ inputs.node_version }}
+      node_build_args:  ${{ inputs.node_build_args }}
+      node_test_args:   ${{ inputs.node_test_args }}
+      package_manager:  ${{ needs.detect.outputs.package_manager }}
+    secrets: inherit
+
+  python:
+    needs: detect
+    if: >-
+      needs.detect.outputs.has_python == 'true' ||
+      needs.detect.outputs.has_django == 'true' ||
+      needs.detect.outputs.has_mkdocs == 'true' ||
+      needs.detect.outputs.has_tox == 'true'
+    uses: ./.github/workflows/_build-python.yml
+    with:
+      runner:          ${{ inputs.runner }}
+      has_python:      ${{ needs.detect.outputs.has_python }}
+      has_tox:         ${{ needs.detect.outputs.has_tox }}
+      has_django:      ${{ needs.detect.outputs.has_django }}
+      has_mkdocs:      ${{ needs.detect.outputs.has_mkdocs }}
+      python_disabled: ${{ inputs.python_disabled }}
+      python_version:  ${{ inputs.python_version }}
+    secrets: inherit
+
+  go:
+    needs: detect
+    if: needs.detect.outputs.has_go == 'true' && !inputs.golang_disabled
+    uses: ./.github/workflows/_build-go.yml
+    with:
+      runner:          ${{ inputs.runner }}
+      golang_disabled: ${{ inputs.golang_disabled }}
+      golang_version:  ${{ inputs.golang_version }}
+    secrets: inherit
+
+  rust:
+    needs: detect
+    if: needs.detect.outputs.has_cargo == 'true' && !inputs.rust_disabled
+    uses: ./.github/workflows/_build-rust.yml
+    with:
+      runner:         ${{ inputs.runner }}
+      rust_disabled:  ${{ inputs.rust_disabled }}
+      rust_toolchain: ${{ inputs.rust_toolchain }}
+    secrets: inherit
+
+  dotnet:
+    needs: detect
+    if: needs.detect.outputs.has_dotnet == 'true' && !inputs.dotnet_disabled
+    uses: ./.github/workflows/_build-dotnet.yml
+    with:
+      runner:          ${{ inputs.runner }}
+      dotnet_disabled: ${{ inputs.dotnet_disabled }}
+      dotnet_version:  ${{ inputs.dotnet_version }}
+    secrets: inherit
+
+  php:
+    needs: detect
+    if: needs.detect.outputs.has_php == 'true' && !inputs.php_disabled
+    uses: ./.github/workflows/_build-php.yml
+    with:
+      runner:         ${{ inputs.runner }}
+      php_disabled:   ${{ inputs.php_disabled }}
+      php_version:    ${{ inputs.php_version }}
+      php_extensions: ${{ inputs.php_extensions }}
+      has_twig:       ${{ needs.detect.outputs.has_twig }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   DOCKER
+  # ═══════════════════════════════════════════════════════════
+
+  docker:
+    needs: detect
+    if: needs.detect.outputs.has_dockerfile == 'true' && !inputs.docker_disabled
+    uses: ./.github/workflows/_docker.yml
+    with:
+      runner:                 ${{ inputs.runner }}
+      docker_disabled:        ${{ inputs.docker_disabled }}
+      hadolint_disabled:      ${{ inputs.hadolint_disabled }}
+      container_scan_disabled: ${{ inputs.container_scan_disabled }}
+      dockerfile_path:        ${{ inputs.dockerfile_path }}
+      docker_context:         ${{ inputs.docker_context }}
+      docker_tag_extra:       ${{ inputs.docker_tag_extra }}
+      docker_registry:        ${{ inputs.docker_registry }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   E2E TESTING
+  # ═══════════════════════════════════════════════════════════
+
+  e2e:
+    needs: [detect, node]
+    if: >-
+      always() && (
+        needs.detect.outputs.has_cypress == 'true' ||
+        needs.detect.outputs.has_playwright == 'true' ||
+        needs.detect.outputs.has_hurl == 'true'
+      )
+    uses: ./.github/workflows/_test-e2e.yml
+    with:
+      runner:              ${{ inputs.runner }}
+      has_cypress:         ${{ needs.detect.outputs.has_cypress }}
+      has_playwright:      ${{ needs.detect.outputs.has_playwright }}
+      has_hurl:            ${{ needs.detect.outputs.has_hurl }}
+      cypress_disabled:    ${{ inputs.cypress_disabled }}
+      playwright_disabled: ${{ inputs.playwright_disabled }}
+      hurl_disabled:       ${{ inputs.hurl_disabled }}
+      node_version:        ${{ inputs.node_version }}
+      cypress_browsers:    ${{ inputs.cypress_browsers }}
+      hurl_extra_args:     ${{ inputs.hurl_extra_args }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   SECURITY
+  # ═══════════════════════════════════════════════════════════
+
+  security:
+    needs: [detect, java, node, python, go, rust, dotnet, php]
+    if: always()
+    uses: ./.github/workflows/_security.yml
+    with:
+      runner:                     ${{ inputs.runner }}
+      has_sql:                    ${{ needs.detect.outputs.has_sql }}
+      sast_disabled:              ${{ inputs.sast_disabled }}
+      secret_detection_disabled:  ${{ inputs.secret_detection_disabled }}
+      dependency_scan_disabled:   ${{ inputs.dependency_scan_disabled }}
+      iac_scan_disabled:          ${{ inputs.iac_scan_disabled }}
+      sonar_disabled:             ${{ inputs.sonar_disabled }}
+      checkmarx_disabled:         ${{ inputs.checkmarx_disabled }}
+      sqlfluff_disabled:          ${{ inputs.sqlfluff_disabled }}
+      sonar_host_url:             ${{ inputs.sonar_host_url }}
+      sonar_project_key:          ${{ inputs.sonar_project_key }}
+      checkmarx_base_url:         ${{ inputs.checkmarx_base_url }}
+      sqlfluff_dialect:           ${{ inputs.sqlfluff_dialect }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   QUALITY & METRICS
+  # ═══════════════════════════════════════════════════════════
+
+  quality:
+    needs: detect
+    if: always()
+    uses: ./.github/workflows/_quality.yml
+    with:
+      runner:                ${{ inputs.runner }}
+      has_mkdocs:            ${{ needs.detect.outputs.has_mkdocs }}
+      code_quality_disabled: ${{ inputs.code_quality_disabled }}
+      code_metrics_disabled: ${{ inputs.code_metrics_disabled }}
+      links_check_disabled:  ${{ inputs.links_check_disabled }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   HELM / KUBERNETES
+  # ═══════════════════════════════════════════════════════════
+
+  helm:
+    needs: detect
+    if: needs.detect.outputs.has_helm == 'true' && !inputs.helm_disabled
+    uses: ./.github/workflows/_helm.yml
+    with:
+      runner:           ${{ inputs.runner }}
+      helm_disabled:    ${{ inputs.helm_disabled }}
+      helm_chart_path:  ${{ inputs.helm_chart_path }}
+      helm_values_files: ${{ inputs.helm_values_files }}
+    secrets: inherit
+
+  # ═══════════════════════════════════════════════════════════
+  #   PAGES — Aggregate all reports & deploy
+  # ═══════════════════════════════════════════════════════════
+
+  pages:
+    needs: [java, node, python, go, rust, dotnet, php, docker, e2e, security, quality, helm]
+    if: always() && !inputs.pages_disabled
+    uses: ./.github/workflows/_pages.yml
+    with:
+      runner:         ${{ inputs.runner }}
+      pages_disabled: ${{ inputs.pages_disabled }}
+    secrets: inherit

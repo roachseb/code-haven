@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 6 — Rust project with full quality gates
+# Includes fmt, clippy, doc generation, and Hurl API testing.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      rust_toolchain: 'stable'
+      # Enable Hurl for API integration tests
+      hurl_extra_args: '--variable base_url=http://localhost:8080'
+      # Disable languages we don't use
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      python_disabled: true
+      golang_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+    secrets: inherit

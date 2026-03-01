@@ -1,0 +1,137 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Python Build Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "🐍 Python"
+
+on:
+  workflow_call:
+    inputs:
+      runner:          { type: string, default: 'ubuntu-latest' }
+      has_python:      { type: string, default: 'false' }
+      has_tox:         { type: string, default: 'false' }
+      has_django:      { type: string, default: 'false' }
+      has_mkdocs:      { type: string, default: 'false' }
+      python_disabled: { type: boolean, default: false }
+      python_version:  { type: string, default: '3.x' }
+
+jobs:
+  # ── Build ────────────────────────────────────────────────
+  python-build:
+    name: "🐍 Python Build"
+    if: inputs.has_python == 'true' && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - name: Install & Build
+        run: |
+          pip install --upgrade pip build
+          [[ -f requirements.txt ]] && pip install -r requirements.txt || true
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with: { name: python-dist, path: dist, retention-days: 1 }
+
+  # ── Test ─────────────────────────────────────────────────
+  python-test:
+    name: "🐍 Python Test"
+    needs: python-build
+    if: inputs.has_python == 'true' && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - name: Test with coverage
+        run: |
+          pip install --upgrade pip
+          [[ -f requirements.txt ]] && pip install -r requirements.txt || true
+          pip install pytest coverage
+          coverage run -m pytest --junitxml=pytest-report.xml -v || true
+          coverage html
+          coverage xml -o coverage.xml
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-coverage
+          path: |
+            htmlcov
+            coverage.xml
+            pytest-report.xml
+          retention-days: 7
+      - uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Python Tests
+          path: pytest-report.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  # ── Tox ──────────────────────────────────────────────────
+  python-tox:
+    name: "🐍 Python Tox"
+    if: inputs.has_tox == 'true' && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - run: pip install tox
+      - run: tox
+
+  # ── Django ───────────────────────────────────────────────
+  django-test:
+    name: "🐍 Django Test"
+    if: inputs.has_django == 'true' && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - name: Test
+        run: |
+          pip install --upgrade pip
+          [[ -f requirements.txt ]] && pip install -r requirements.txt || true
+          python manage.py test
+
+  # ── MkDocs ──────────────────────────────────────────────
+  mkdocs-build:
+    name: "📚 MkDocs Build"
+    if: inputs.has_mkdocs == 'true'
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.x', cache: pip }
+      - name: Build docs
+        run: |
+          [[ -f requirements.txt ]] && pip install -r requirements.txt || pip install mkdocs-material
+          mkdocs build --strict --verbose --site-dir mkdocs-site
+      - uses: actions/upload-artifact@v4
+        with: { name: mkdocs-site, path: mkdocs-site, retention-days: 7 }
+
+  # ── PyPI Publish ─────────────────────────────────────────
+  python-deploy:
+    name: "🐍 Python Deploy (PyPI)"
+    needs: python-build
+    if: |
+      inputs.has_python == 'true'
+      && !inputs.python_disabled
+      && startsWith(github.ref, 'refs/tags/')
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: python-dist, path: dist }
+      - uses: pypa/gh-action-pypi-publish@release/v1

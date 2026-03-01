@@ -1,0 +1,57 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — PHP Build Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "🐘 PHP"
+
+on:
+  workflow_call:
+    inputs:
+      runner:         { type: string, default: 'ubuntu-latest' }
+      php_disabled:   { type: boolean, default: false }
+      php_version:    { type: string, default: '8.3' }
+      php_extensions: { type: string, default: 'mbstring, xml, xdebug' }
+      has_twig:       { type: string, default: 'false' }
+
+jobs:
+  php-test:
+    name: "🐘 PHP Test"
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          coverage: xdebug
+      - name: Install & Test
+        run: |
+          composer install --prefer-dist --no-progress
+          PHPUNIT=$(find . -name phpunit -o -name phpunit.phar -type f | head -1)
+          [[ -z "$PHPUNIT" ]] && PHPUNIT="./vendor/bin/phpunit"
+          php "$PHPUNIT" \
+            --coverage-text \
+            --coverage-cobertura=php-reports/cobertura.xml \
+            --log-junit=php-reports/junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: php-reports, path: php-reports, retention-days: 7 }
+      - uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: PHP Tests
+          path: php-reports/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  php-twig-lint:
+    name: "🐘 PHP Twig Lint"
+    if: inputs.has_twig == 'true'
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '${{ inputs.php_version }}' }
+      - run: composer install --prefer-dist --no-progress
+      - run: php bin/console lint:twig templates/

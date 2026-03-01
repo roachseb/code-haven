@@ -1,0 +1,117 @@
+name: 'K8s Deploy (Helm)'
+description: 'Deploy to Kubernetes via Helm — equivalent of k8s.toolkit.gitlab-ci.yml'
+
+inputs:
+  kubeconfig:
+    description: 'Base64-encoded kubeconfig'
+    required: true
+  namespace:
+    description: 'Kubernetes namespace'
+    required: true
+  release-name:
+    description: 'Helm release name (defaults to repo name)'
+    required: false
+    default: ''
+  chart-path:
+    description: 'Path to Helm chart or OCI chart URL'
+    required: false
+    default: '.'
+  values-files:
+    description: 'Comma-separated list of values files'
+    required: false
+    default: 'values.yaml'
+  extra-args:
+    description: 'Extra args passed to helm upgrade'
+    required: false
+    default: ''
+  image-tag:
+    description: 'Container image tag to deploy'
+    required: false
+    default: ''
+  timeout:
+    description: 'Helm timeout'
+    required: false
+    default: '5m'
+  atomic:
+    description: 'Enable --atomic (auto-rollback on failure)'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup kubeconfig
+      shell: bash
+      run: |
+        mkdir -p "$HOME/.kube"
+        echo "${{ inputs.kubeconfig }}" | base64 -d > "$HOME/.kube/config"
+        chmod 600 "$HOME/.kube/config"
+        kubectl cluster-info
+        echo "✅ Connected to Kubernetes cluster"
+
+    - name: Setup Helm
+      uses: azure/setup-helm@v4
+
+    - name: Helm dependency update
+      shell: bash
+      run: |
+        if [[ -f "${{ inputs.chart-path }}/Chart.yaml" ]]; then
+          helm dependency update "${{ inputs.chart-path }}"
+        fi
+
+    - name: Deploy with Helm
+      shell: bash
+      run: |
+        RELEASE="${{ inputs.release-name }}"
+        [[ -z "$RELEASE" ]] && RELEASE="${GITHUB_REPOSITORY##*/}"
+
+        # Build values file args
+        VALUES_ARGS=""
+        IFS=',' read -ra FILES <<< "${{ inputs.values-files }}"
+        for f in "${FILES[@]}"; do
+          f=$(echo "$f" | xargs)  # trim whitespace
+          [[ -f "$f" ]] && VALUES_ARGS="$VALUES_ARGS -f $f"
+        done
+
+        # Build image tag override
+        IMAGE_ARGS=""
+        if [[ -n "${{ inputs.image-tag }}" ]]; then
+          IMAGE_ARGS="--set image.tag=${{ inputs.image-tag }}"
+        fi
+
+        # Atomic flag
+        ATOMIC_FLAG=""
+        [[ "${{ inputs.atomic }}" == "true" ]] && ATOMIC_FLAG="--atomic"
+
+        echo "🚀 Deploying $RELEASE to namespace ${{ inputs.namespace }}"
+        helm upgrade --install "$RELEASE" "${{ inputs.chart-path }}" \
+          --namespace "${{ inputs.namespace }}" \
+          --create-namespace \
+          --timeout "${{ inputs.timeout }}" \
+          --wait \
+          $ATOMIC_FLAG \
+          $VALUES_ARGS \
+          $IMAGE_ARGS \
+          ${{ inputs.extra-args }}
+
+        echo "✅ Deployment complete"
+
+    - name: Deployment status
+      shell: bash
+      if: always()
+      run: |
+        RELEASE="${{ inputs.release-name }}"
+        [[ -z "$RELEASE" ]] && RELEASE="${GITHUB_REPOSITORY##*/}"
+
+        echo "## ⎈ Helm Deployment" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+        echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Release | \`$RELEASE\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Namespace | \`${{ inputs.namespace }}\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Chart | \`${{ inputs.chart-path }}\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Image Tag | \`${{ inputs.image-tag || 'default' }}\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+
+        helm status "$RELEASE" -n "${{ inputs.namespace }}" 2>/dev/null && echo "" >> "$GITHUB_STEP_SUMMARY" || true
+        kubectl get pods -n "${{ inputs.namespace }}" -l "app.kubernetes.io/instance=$RELEASE" 2>/dev/null || true

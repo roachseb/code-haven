@@ -1,0 +1,78 @@
+# Toolkit — shared utility steps for all jobs
+# This is the GitHub Actions equivalent of Toolkit.gitlab-ci.yml + .cr-toolkit-init
+#
+# Usage in a workflow:
+#   steps:
+#     - uses: code-haven/code-haven/actions/toolkit@main
+#       with:
+#         debug: 'true'
+#         custom_ca_certs: ${{ secrets.CA_BUNDLE }}
+
+name: Toolkit Init
+description: >
+  Initialize the CI environment — install CA certs, configure logging,
+  and run optional post-init scripts. Equivalent to .cr-toolkit-init in GitLab.
+
+inputs:
+  debug:
+    description: 'Enable debug logging'
+    required: false
+    default: 'false'
+  custom_ca_certs:
+    description: 'PEM-encoded CA certificates to install system-wide'
+    required: false
+    default: ''
+  post_init_script:
+    description: 'Script to run after initialization (file path or inline commands)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Configure logging
+      shell: bash
+      run: |
+        if [[ "${{ inputs.debug }}" == "true" ]]; then
+          echo "::debug::Debug mode enabled"
+          set -x
+        fi
+
+        # Logging functions available to subsequent steps via sourcing
+        cat >> "$GITHUB_ENV" << 'FUNCS'
+        CR_DEBUG=${{ inputs.debug }}
+        FUNCS
+
+        cat >> "$GITHUB_PATH" << 'EOF'
+        EOF
+
+    - name: Install CA certificates
+      if: inputs.custom_ca_certs != ''
+      shell: bash
+      run: |
+        echo "${{ inputs.custom_ca_certs }}" | sudo tee /usr/local/share/ca-certificates/custom-ca.crt > /dev/null
+        sudo update-ca-certificates
+
+        # Java keystore (if Java is installed)
+        if command -v keytool &>/dev/null; then
+          JAVA_HOME="${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which java))))}"
+          KEYSTORE="${JAVA_HOME}/lib/security/cacerts"
+          echo "${{ inputs.custom_ca_certs }}" | \
+            csplit -z -f /tmp/cert- - '/-----BEGIN CERTIFICATE-----/' '{*}' 2>/dev/null
+          for cert in /tmp/cert-*; do
+            alias="custom-ca-$(basename $cert)"
+            sudo keytool -importcert -keystore "$KEYSTORE" -storepass changeit \
+              -alias "$alias" -file "$cert" -noprompt 2>/dev/null || true
+          done
+        fi
+
+    - name: Run post-init script
+      if: inputs.post_init_script != ''
+      shell: bash
+      run: |
+        SCRIPT="${{ inputs.post_init_script }}"
+        if [[ -f "$SCRIPT" ]]; then
+          bash "$SCRIPT"
+        else
+          eval "$SCRIPT"
+        fi

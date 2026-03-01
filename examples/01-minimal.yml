@@ -1,0 +1,15 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 1 — Zero-config (auto-detect everything)
+# Just include the template and let detection do its thing.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feat/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    secrets: inherit

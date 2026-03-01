@@ -1,0 +1,102 @@
+# Cloud Login — unified AWS/Azure/GCP authentication
+# This is the GitHub Actions equivalent of aws.toolkit + azure.toolkit + gcp.toolkit
+#
+# Usage:
+#   - uses: code-haven/code-haven/actions/cloud-login@main
+#     with:
+#       provider: aws
+#       aws_role_arn: arn:aws:iam::123456789:role/my-role
+#       aws_region: eu-west-1
+
+name: Cloud Login
+description: >
+  Authenticate with AWS, Azure, or GCP. Supports OIDC (recommended) and
+  static credentials. Optionally logs into the cloud's container registry.
+
+inputs:
+  provider:
+    description: 'Cloud provider: aws, azure, gcp'
+    required: true
+
+  # ── AWS ──────────────────────────────────────
+  aws_role_arn:
+    description: 'IAM role ARN for OIDC authentication'
+    required: false
+  aws_region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  aws_ecr_login:
+    description: 'Also login to ECR'
+    required: false
+    default: 'false'
+
+  # ── Azure ────────────────────────────────────
+  azure_client_id:
+    description: 'Service principal client ID'
+    required: false
+  azure_client_secret:
+    description: 'Service principal secret'
+    required: false
+  azure_tenant_id:
+    description: 'Azure AD tenant ID'
+    required: false
+  azure_subscription_id:
+    description: 'Azure subscription ID'
+    required: false
+  azure_acr_name:
+    description: 'ACR name for Docker login'
+    required: false
+
+  # ── GCP ──────────────────────────────────────
+  gcp_workload_identity_provider:
+    description: 'GCP workload identity provider for OIDC'
+    required: false
+  gcp_service_account:
+    description: 'GCP service account email'
+    required: false
+  gcp_credentials_json:
+    description: 'GCP service account key JSON (fallback)'
+    required: false
+
+runs:
+  using: composite
+  steps:
+    # ── AWS (OIDC) ─────────────────────────────
+    - name: AWS Login
+      if: inputs.provider == 'aws'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws_role_arn }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - name: ECR Login
+      if: inputs.provider == 'aws' && inputs.aws_ecr_login == 'true'
+      uses: aws-actions/amazon-ecr-login@v2
+
+    # ── Azure ──────────────────────────────────
+    - name: Azure Login
+      if: inputs.provider == 'azure'
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.azure_client_id }}
+        tenant-id: ${{ inputs.azure_tenant_id }}
+        subscription-id: ${{ inputs.azure_subscription_id }}
+
+    - name: ACR Login
+      if: inputs.provider == 'azure' && inputs.azure_acr_name != ''
+      shell: bash
+      run: az acr login --name ${{ inputs.azure_acr_name }}
+
+    # ── GCP ────────────────────────────────────
+    - name: GCP Auth
+      if: inputs.provider == 'gcp'
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.gcp_workload_identity_provider }}
+        service_account: ${{ inputs.gcp_service_account }}
+
+    - name: GCP Docker Auth
+      if: inputs.provider == 'gcp'
+      shell: bash
+      run: gcloud auth configure-docker

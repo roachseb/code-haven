@@ -1,0 +1,149 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Java Build Pipeline (Maven + Gradle)
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "☕ Java"
+
+on:
+  workflow_call:
+    inputs:
+      runner:            { type: string, default: 'ubuntu-latest' }
+      has_pom:           { type: string, default: 'false' }
+      has_gradle:        { type: string, default: 'false' }
+      maven_disabled:    { type: boolean, default: false }
+      gradle_disabled:   { type: boolean, default: false }
+      java_version:      { type: string, default: '21' }
+      java_distribution: { type: string, default: 'temurin' }
+      maven_cli_opts:    { type: string, default: '--batch-mode --errors --fail-at-end --show-version' }
+      maven_build_cmd:   { type: string, default: 'install' }
+      java_formatter:    { type: string, default: 'revelc' }
+      gradle_build_cmd:  { type: string, default: 'build' }
+
+jobs:
+  # ── Maven ────────────────────────────────────────────────
+  maven-build:
+    name: "☕ Maven Build"
+    if: inputs.has_pom == 'true' && !inputs.maven_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+          cache: maven
+      - name: Maven Build
+        run: mvn ${{ inputs.maven_cli_opts }} ${{ inputs.maven_build_cmd }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maven-target
+          path: |
+            **/target/*.jar
+            **/target/*.war
+            **/target/site
+            **/target/*-reports
+            **/target/surefire-reports
+            **/target/failsafe-reports
+            **/target/dependency-check-*
+          retention-days: 1
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Maven Tests
+          path: '**/target/*-reports/*.xml'
+          reporter: java-junit
+          fail-on-error: false
+
+  java-fmt:
+    name: "☕ Java Format Check"
+    if: inputs.has_pom == 'true' && !inputs.maven_disabled && inputs.java_formatter != 'disabled'
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+          cache: maven
+      - name: Check formatting
+        run: |
+          if [[ "${{ inputs.java_formatter }}" == "spotify" ]]; then
+            mvn ${{ inputs.maven_cli_opts }} com.spotify.fmt:fmt-maven-plugin:check
+          else
+            mvn ${{ inputs.maven_cli_opts }} net.revelc.code.formatter:formatter-maven-plugin:validate
+          fi
+
+  java-doc:
+    name: "☕ Javadoc"
+    needs: maven-build
+    if: always() && needs.maven-build.result == 'success'
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+          cache: maven
+      - run: mvn ${{ inputs.maven_cli_opts }} javadoc:javadoc -DskipTests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javadoc
+          path: '**/target/site/apidocs'
+          retention-days: 7
+
+  # ── Gradle ───────────────────────────────────────────────
+  gradle-build:
+    name: "🐘 Gradle Build"
+    if: inputs.has_gradle == 'true' && !inputs.gradle_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - run: gradle ${{ inputs.gradle_build_cmd }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build
+          path: |
+            **/build/libs
+            **/build/reports
+            **/build/test-results
+            **/build/docs
+          retention-days: 1
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Gradle Tests
+          path: '**/build/test-results/test/*.xml'
+          reporter: java-junit
+          fail-on-error: false
+
+  gradle-doc:
+    name: "🐘 Gradle Javadoc"
+    needs: gradle-build
+    if: always() && needs.gradle-build.result == 'success'
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - run: gradle javadoc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gradle-javadoc
+          path: '**/build/docs/javadoc'
+          retention-days: 7

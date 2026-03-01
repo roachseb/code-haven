@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Rust Build Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "🦀 Rust"
+
+on:
+  workflow_call:
+    inputs:
+      runner:        { type: string, default: 'ubuntu-latest' }
+      rust_disabled: { type: boolean, default: false }
+      rust_toolchain: { type: string, default: 'stable' }
+
+jobs:
+  rust-build:
+    name: "🦀 Rust Build & Test"
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ inputs.rust_toolchain }}', components: 'clippy, rustfmt' }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --verbose
+      - run: cargo test --verbose 2>&1 | tee test-output.txt
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🦀 Rust Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^test |^test result:" test-output.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  rust-fmt:
+    name: "🦀 Rust Fmt"
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ inputs.rust_toolchain }}', components: rustfmt }
+      - run: cargo fmt -- --check
+
+  rust-clippy:
+    name: "🦀 Rust Clippy"
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: '${{ inputs.rust_toolchain }}', components: clippy }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -- -D warnings
+
+  rust-doc:
+    name: "🦀 Rust Doc"
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +nightly doc --no-deps
+        env:
+          RUSTDOCFLAGS: "--enable-index-page -Zunstable-options"
+      - uses: actions/upload-artifact@v4
+        with: { name: rust-doc, path: target/doc, retention-days: 7 }

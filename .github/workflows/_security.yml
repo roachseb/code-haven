@@ -1,0 +1,160 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Security Scanning Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "🛡 Security"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                      { type: string, default: 'ubuntu-latest' }
+      has_sql:                     { type: string, default: 'false' }
+      sast_disabled:               { type: boolean, default: false }
+      secret_detection_disabled:   { type: boolean, default: false }
+      dependency_scan_disabled:    { type: boolean, default: false }
+      iac_scan_disabled:           { type: boolean, default: false }
+      sonar_disabled:              { type: boolean, default: false }
+      checkmarx_disabled:          { type: boolean, default: false }
+      sqlfluff_disabled:           { type: boolean, default: false }
+      sonar_host_url:              { type: string, default: '' }
+      sonar_project_key:           { type: string, default: '' }
+      checkmarx_base_url:          { type: string, default: '' }
+      sqlfluff_dialect:            { type: string, default: 'ansi' }
+    secrets:
+      SONAR_TOKEN:                 { required: false }
+      CHECKMARX_TOKEN:             { required: false }
+      CHECKMARX_USERNAME:          { required: false }
+      CHECKMARX_PASSWORD:          { required: false }
+
+jobs:
+  # ── SAST (CodeQL) ───────────────────────────────────────
+  sast:
+    name: "🛡 SAST (CodeQL)"
+    if: ${{ !inputs.sast_disabled }}
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with: { languages: 'auto' }
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with: { category: 'sast' }
+
+  # ── Secret Detection ────────────────────────────────────
+  secret-detection:
+    name: "🔑 Secret Detection"
+    if: ${{ !inputs.secret_detection_disabled }}
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Dependency Scan ──────────────────────────────────────
+  dependency-scan:
+    name: "📦 Dependency Scan (Trivy FS)"
+    if: ${{ !inputs.dependency_scan_disabled }}
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          format: sarif
+          output: dependency-results.sarif
+          severity: 'CRITICAL,HIGH,MEDIUM'
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: dependency-results.sarif, category: 'dependency-scan' }
+        continue-on-error: true
+
+  # ── IaC Scan ─────────────────────────────────────────────
+  iac-scan:
+    name: "🏗 IaC Scan (KICS)"
+    if: ${{ !inputs.iac_scan_disabled }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: checkmarx/kics-github-action@v2.1.3
+        with:
+          path: .
+          output_path: kics-results
+          output_formats: 'sarif,json'
+          fail_on: high
+        continue-on-error: true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: kics-results/results.sarif, category: 'iac-scan' }
+        continue-on-error: true
+
+  # ── SonarQube ────────────────────────────────────────────
+  sonarqube:
+    name: "🔍 SonarQube"
+    if: |
+      !inputs.sonar_disabled
+      && inputs.sonar_host_url != ''
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { path: artifacts }
+      - uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ inputs.sonar_host_url }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ inputs.sonar_project_key || github.event.repository.name }}
+            -Dsonar.projectName=${{ github.repository }}
+
+  # ── Checkmarx ────────────────────────────────────────────
+  checkmarx:
+    name: "🛡 Checkmarx SAST"
+    if: |
+      !inputs.checkmarx_disabled
+      && inputs.checkmarx_base_url != ''
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: checkmarx-ts/checkmarx-cxflow-github-action@v1.9
+        with:
+          checkmarx_url: ${{ inputs.checkmarx_base_url }}
+          checkmarx_username: ${{ secrets.CHECKMARX_USERNAME }}
+          checkmarx_password: ${{ secrets.CHECKMARX_PASSWORD }}
+          checkmarx_client_secret: ${{ secrets.CHECKMARX_TOKEN }}
+          project: ${{ github.event.repository.name }}-${{ github.ref_name }}
+          scanners: sast
+          break_build: false
+
+  # ── SQLFluff ─────────────────────────────────────────────
+  sqlfluff:
+    name: "📊 SQLFluff Lint"
+    if: inputs.has_sql == 'true' && !inputs.sqlfluff_disabled
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.x' }
+      - run: pip install sqlfluff
+      - name: Lint SQL
+        run: |
+          sqlfluff lint --dialect ${{ inputs.sqlfluff_dialect }} \
+            --format github-annotation-native \
+            $(find . -name '*.sql' | head -100) || true
+          sqlfluff lint --dialect ${{ inputs.sqlfluff_dialect }} \
+            --format json > sqlfluff-report.json || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: sqlfluff-report, path: sqlfluff-report.json, retention-days: 7 }

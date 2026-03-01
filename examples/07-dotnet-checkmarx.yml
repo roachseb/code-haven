@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 7 — .NET + Checkmarx + SQLFluff
+# Enterprise .NET app with commercial SAST and SQL linting.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      dotnet_version: '8.0.x'
+      sqlfluff_dialect: 'tsql'
+      checkmarx_base_url: 'https://checkmarx.example.com'
+      sonar_host_url: 'https://sonarqube.example.com'
+      sonar_project_key: 'my-dotnet-api'
+      # Disable unused stacks
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      python_disabled: true
+      golang_disabled: true
+      rust_disabled: true
+      php_disabled: true
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      CHECKMARX_USERNAME: ${{ secrets.CX_USER }}
+      CHECKMARX_PASSWORD: ${{ secrets.CX_PASS }}

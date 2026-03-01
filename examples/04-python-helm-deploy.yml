@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 4 — Python (Django) + Docker + Helm Deploy
+# A Python web app with Kubernetes deployment.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  # ── Standard CI pipeline ────────────────────────────────────
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      python_version: '3.12'
+      docker_registry: 'ghcr.io'
+      helm_chart_path: 'deploy/helm'
+      helm_values_files: 'deploy/helm/values.yaml,deploy/helm/values-production.yaml'
+      k8s_namespace: 'my-app-prod'
+      sonar_host_url: 'https://sonarqube.example.com'
+      # Only Python + Docker + Helm
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      golang_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+    secrets: inherit
+
+  # ── Deploy to staging on push to main ───────────────────────
+  deploy-staging:
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: code-haven/code-haven/actions/k8s-deploy@main
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+          namespace: my-app-staging
+          chart-path: deploy/helm
+          values-files: 'deploy/helm/values.yaml,deploy/helm/values-staging.yaml'
+          image-tag: ${{ github.sha }}
+
+  # ── Deploy to production on release ─────────────────────────
+  deploy-production:
+    needs: ci
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: code-haven/code-haven/actions/k8s-deploy@main
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
+          namespace: my-app-prod
+          chart-path: deploy/helm
+          values-files: 'deploy/helm/values.yaml,deploy/helm/values-production.yaml'
+          image-tag: ${{ github.event.release.tag_name }}
+          atomic: 'true'

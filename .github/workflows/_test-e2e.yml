@@ -1,0 +1,111 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — E2E Testing Pipeline (Cypress, Playwright, Hurl)
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "🧪 E2E Tests"
+
+on:
+  workflow_call:
+    inputs:
+      runner:               { type: string, default: 'ubuntu-latest' }
+      has_cypress:          { type: string, default: 'false' }
+      has_playwright:       { type: string, default: 'false' }
+      has_hurl:             { type: string, default: 'false' }
+      cypress_disabled:     { type: boolean, default: false }
+      playwright_disabled:  { type: boolean, default: false }
+      hurl_disabled:        { type: boolean, default: false }
+      node_version:         { type: string, default: 'lts/*' }
+      cypress_browsers:     { type: string, default: 'chrome' }
+      hurl_extra_args:      { type: string, default: '' }
+    secrets:
+      CYPRESS_RECORD_KEY:   { required: false }
+
+jobs:
+  # ── Cypress ──────────────────────────────────────────────
+  cypress:
+    name: "🎯 Cypress (${{ matrix.browser }})"
+    if: inputs.has_cypress == 'true' && !inputs.cypress_disabled
+    runs-on: ${{ inputs.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ${{ fromJSON(format('["{0}"]', join(fromJSON(format('["{0}"]', inputs.cypress_browsers)), '","'))) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+        continue-on-error: true
+      - uses: cypress-io/github-action@v6
+        with:
+          browser: ${{ matrix.browser }}
+          install: true
+        env:
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-${{ matrix.browser }}
+          path: |
+            cypress/videos
+            cypress/screenshots
+          retention-days: 7
+
+  # ── Playwright ───────────────────────────────────────────
+  playwright:
+    name: "🎭 Playwright"
+    if: inputs.has_playwright == 'true' && !inputs.playwright_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ inputs.node_version }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: node-modules, path: node_modules }
+        continue-on-error: true
+      - name: Install & Test
+        run: |
+          npx playwright install --with-deps
+          npx playwright test --reporter=html,junit,list
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: playwright-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            playwright-results.xml
+          retention-days: 7
+      - uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Playwright Tests
+          path: playwright-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  # ── Hurl ─────────────────────────────────────────────────
+  hurl-test:
+    name: "🚀 Hurl API Tests"
+    if: inputs.has_hurl == 'true' && !inputs.hurl_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Hurl
+        run: |
+          curl -sSL https://github.com/Orange-OpenSource/hurl/releases/latest/download/hurl_amd64.deb -o /tmp/hurl.deb
+          sudo dpkg -i /tmp/hurl.deb
+      - name: Run Hurl tests
+        run: |
+          hurl --test --color --report-html hurl-report \
+            --report-junit hurl-results.xml \
+            ${{ inputs.hurl_extra_args }} \
+            $(find . -name '*.hurl' | sort)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hurl-report
+          path: |
+            hurl-report
+            hurl-results.xml
+          retention-days: 7

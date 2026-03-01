@@ -1,0 +1,91 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 5 — Multi-cloud login + Go microservice
+# Demonstrates using the cloud-login composite action for
+# multi-cloud environments alongside the standard CI pipeline.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write    # Required for OIDC
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  # ── Standard CI pipeline ────────────────────────────────────
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      golang_version: '1.22'
+      docker_registry: 'ghcr.io'
+      # Focus on Go only
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+    secrets: inherit
+
+  # ── Deploy to AWS EKS ──────────────────────────────────────
+  deploy-aws:
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production-aws
+    steps:
+      - uses: actions/checkout@v4
+
+      # Authenticate to AWS via OIDC
+      - uses: code-haven/code-haven/actions/cloud-login@main
+        with:
+          cloud: aws
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      # Push to ECR
+      - run: |
+          aws ecr get-login-password --region eu-west-1 | \
+            docker login --username AWS --password-stdin 123456789.dkr.ecr.eu-west-1.amazonaws.com
+          docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            123456789.dkr.ecr.eu-west-1.amazonaws.com/my-app:${{ github.sha }}
+          docker push 123456789.dkr.ecr.eu-west-1.amazonaws.com/my-app:${{ github.sha }}
+
+      # Deploy to EKS
+      - uses: code-haven/code-haven/actions/k8s-deploy@main
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_AWS }}
+          namespace: my-app
+          chart-path: deploy/helm
+          image-tag: ${{ github.sha }}
+
+  # ── Deploy to Azure AKS ────────────────────────────────────
+  deploy-azure:
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production-azure
+    steps:
+      - uses: actions/checkout@v4
+
+      # Authenticate to Azure via OIDC
+      - uses: code-haven/code-haven/actions/cloud-login@main
+        with:
+          cloud: azure
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: code-haven/code-haven/actions/k8s-deploy@main
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_AZURE }}
+          namespace: my-app
+          chart-path: deploy/helm
+          image-tag: ${{ github.sha }}

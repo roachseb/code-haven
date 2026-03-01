@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 3 — Angular + Cypress + Playwright
+# A frontend project with full E2E testing across browsers.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      node_version: '20'
+      cypress_browsers: '"chrome","firefox","edge"'
+      # Disable backend languages
+      maven_disabled: true
+      gradle_disabled: true
+      python_disabled: true
+      golang_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      docker_disabled: true
+    secrets: inherit

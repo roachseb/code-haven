@@ -1,0 +1,102 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Docker Pipeline (Build, Lint, Scan)
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "🐳 Docker"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                 { type: string, default: 'ubuntu-latest' }
+      docker_disabled:        { type: boolean, default: false }
+      hadolint_disabled:      { type: boolean, default: false }
+      container_scan_disabled: { type: boolean, default: false }
+      dockerfile_path:        { type: string, default: 'Dockerfile' }
+      docker_context:         { type: string, default: '.' }
+      docker_tag_extra:       { type: string, default: 'latest' }
+      docker_registry:        { type: string, default: 'ghcr.io' }
+
+jobs:
+  docker-build:
+    name: "🐳 Docker Build & Push"
+    if: ${{ !inputs.docker_disabled }}
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      packages: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.docker_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ inputs.docker_registry }}/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.docker_tag_extra }},enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: ${{ inputs.docker_context }}
+          file: ${{ inputs.dockerfile_path }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Summary
+        run: |
+          echo "## 🐳 Docker Image" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tags:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+  hadolint:
+    name: "🐳 Hadolint"
+    if: ${{ !inputs.hadolint_disabled }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ inputs.dockerfile_path }}
+          format: sarif
+          output-file: hadolint.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: hadolint.sarif }
+        continue-on-error: true
+
+  container-scan:
+    name: "🔒 Container Scan (Trivy)"
+    needs: docker-build
+    if: always() && needs.docker-build.result == 'success' && !inputs.container_scan_disabled
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      security-events: write
+    steps:
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ inputs.docker_registry }}/${{ github.repository }}:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: 'CRITICAL,HIGH'
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: trivy-results.sarif }
+        continue-on-error: true

@@ -1,0 +1,89 @@
+site_name: Code Haven — CI/CD Pipeline Documentation
+site_description: >-
+  Auto-detecting, zero-config CI/CD pipeline templates for GitHub Actions.
+  Drop your code, define what you want, and the pipeline handles the rest.
+site_url: https://code-haven.github.io/code-haven
+repo_url: https://github.com/code-haven/code-haven
+repo_name: code-haven/code-haven
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: green
+      accent: lime
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: green
+      accent: lime
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/sprout
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - def_list
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - Configuration: configuration.md
+  - Workflows:
+    - Detection: workflows/detect.md
+    - Java (Maven / Gradle): workflows/java.md
+    - Node.js / Angular: workflows/node.md
+    - Python / Django: workflows/python.md
+    - Go: workflows/go.md
+    - Rust: workflows/rust.md
+    - .NET: workflows/dotnet.md
+    - PHP: workflows/php.md
+    - Docker: workflows/docker.md
+    - E2E Testing: workflows/testing.md
+    - Security Scanning: workflows/security.md
+    - Quality & Metrics: workflows/quality.md
+    - Helm / K8s: workflows/helm.md
+    - GitHub Pages: workflows/pages.md
+  - Composite Actions:
+    - Toolkit: actions/toolkit.md
+    - Cloud Login: actions/cloud-login.md
+    - K8s Deploy: actions/k8s-deploy.md
+    - Code Quality: actions/code-quality.md
+  - Examples: examples.md
+  - Migration Guide: migration.md

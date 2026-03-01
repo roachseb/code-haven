@@ -1,0 +1,67 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Quality & Metrics Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "✨ Quality"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                 { type: string, default: 'ubuntu-latest' }
+      has_mkdocs:             { type: string, default: 'false' }
+      code_quality_disabled:  { type: boolean, default: false }
+      code_metrics_disabled:  { type: boolean, default: false }
+      links_check_disabled:   { type: boolean, default: false }
+    secrets:
+      CC_TEST_REPORTER_ID:    { required: false }
+
+jobs:
+  code-quality:
+    name: "✨ Code Quality"
+    if: ${{ !inputs.code_quality_disabled }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run CodeClimate
+        run: |
+          curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 \
+            -o cc-test-reporter && chmod +x cc-test-reporter
+          if [[ -n "${CC_TEST_REPORTER_ID:-}" ]]; then
+            ./cc-test-reporter before-build
+            ./cc-test-reporter after-build --exit-code 0
+          else
+            echo "::notice::Set CC_TEST_REPORTER_ID secret to enable CodeClimate reporting"
+          fi
+        env:
+          CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
+
+  code-metrics:
+    name: "📏 Code Metrics (SCC)"
+    if: |
+      !inputs.code_metrics_disabled
+      && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: 'stable' }
+      - name: Run SCC
+        run: |
+          go install github.com/boyter/scc/v3@latest
+          mkdir -p scc-report
+          scc --format-multi "wide:stdout,html:scc-report/index.html,json:scc-report/scc.json" .
+      - uses: actions/upload-artifact@v4
+        with: { name: scc-report, path: scc-report, retention-days: 30 }
+
+  links-check:
+    name: "🔗 Link Check"
+    if: inputs.has_mkdocs == 'true' && !inputs.links_check_disabled
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: '--verbose --no-progress --exclude-loopback --accept 200,403,401 **/*.md'
+          fail: false

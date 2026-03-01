@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Helm / Kubernetes Pipeline
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "⎈ Helm"
+
+on:
+  workflow_call:
+    inputs:
+      runner:           { type: string, default: 'ubuntu-latest' }
+      helm_disabled:    { type: boolean, default: false }
+      helm_chart_path:  { type: string, default: '.' }
+      helm_values_files: { type: string, default: 'values.yaml' }
+
+jobs:
+  helm-lint:
+    name: "⎈ Helm Lint"
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint ${{ inputs.helm_chart_path }}
+
+  helm-package:
+    name: "⎈ Helm Package"
+    needs: helm-lint
+    if: |
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      || startsWith(github.ref, 'refs/tags/')
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Package & Push
+        run: |
+          helm dependency update ${{ inputs.helm_chart_path }}
+          helm package ${{ inputs.helm_chart_path }}
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          for chart in *.tgz; do
+            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}/charts
+          done
+      - uses: actions/upload-artifact@v4
+        with: { name: helm-chart, path: '*.tgz', retention-days: 30 }

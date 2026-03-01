@@ -1,0 +1,155 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — GitHub Pages Deployment
+# Aggregates all reports from build/test/quality jobs and
+# publishes them to GitHub Pages.
+# Internal reusable workflow — called from devsecops.yml
+# ═══════════════════════════════════════════════════════════════
+name: "📄 Pages"
+
+on:
+  workflow_call:
+    inputs:
+      runner:         { type: string, default: 'ubuntu-latest' }
+      pages_disabled: { type: boolean, default: false }
+
+jobs:
+  pages:
+    name: "📄 Deploy Pages"
+    if: |
+      !inputs.pages_disabled
+      && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+        continue-on-error: true
+
+      - name: Assemble Pages
+        run: |
+          mkdir -p public
+          shopt -s nullglob
+
+          # ── MkDocs (top-level) ─────────────────────────
+          if [[ -d artifacts/mkdocs-site ]]; then
+            cp -r artifacts/mkdocs-site/* public/
+          fi
+
+          # ── Java (Maven) ───────────────────────────────
+          if [[ -d artifacts/javadoc ]]; then
+            mkdir -p public/java/apidocs
+            cp -r artifacts/javadoc/**/apidocs/* public/java/apidocs/ 2>/dev/null || true
+          fi
+          for d in artifacts/maven-target; do
+            [[ -d "$d" ]] || continue
+            find "$d" -path '*/site/jacoco' -type d -exec sh -c 'mkdir -p public/java/jacoco && cp -r "$1"/* public/java/jacoco/' _ {} \; 2>/dev/null || true
+            find "$d" -name 'dependency-check-report.html' -exec sh -c 'mkdir -p public/java && cp "$1" public/java/' _ {} \; 2>/dev/null || true
+          done
+
+          # ── Java (Gradle) ──────────────────────────────
+          if [[ -d artifacts/gradle-javadoc ]]; then
+            mkdir -p public/java/apidocs
+            cp -r artifacts/gradle-javadoc/**/javadoc/* public/java/apidocs/ 2>/dev/null || true
+          fi
+
+          # ── Python ─────────────────────────────────────
+          if [[ -d artifacts/python-coverage/htmlcov ]]; then
+            mkdir -p public/python/coverage
+            cp -r artifacts/python-coverage/htmlcov/* public/python/coverage/
+          fi
+
+          # ── Go ─────────────────────────────────────────
+          if [[ -d artifacts/go-reports ]]; then
+            mkdir -p public/golang
+            cp -r artifacts/go-reports/* public/golang/
+          fi
+
+          # ── Rust ───────────────────────────────────────
+          if [[ -d artifacts/rust-doc ]]; then
+            mkdir -p public/rust/doc
+            cp -r artifacts/rust-doc/* public/rust/doc/
+          fi
+
+          # ── .NET ───────────────────────────────────────
+          if [[ -d artifacts/dotnet-results ]]; then
+            mkdir -p public/dotnet
+            cp -r artifacts/dotnet-results/* public/dotnet/ 2>/dev/null || true
+          fi
+
+          # ── Angular ────────────────────────────────────
+          if [[ -d artifacts/angular-coverage ]]; then
+            mkdir -p public/angular/coverage
+            cp -r artifacts/angular-coverage/* public/angular/coverage/
+          fi
+
+          # ── PHP ────────────────────────────────────────
+          if [[ -d artifacts/php-reports ]]; then
+            mkdir -p public/php
+            cp -r artifacts/php-reports/* public/php/
+          fi
+
+          # ── Playwright ─────────────────────────────────
+          if [[ -d artifacts/playwright-report ]]; then
+            mkdir -p public/playwright
+            cp -r artifacts/playwright-report/* public/playwright/
+          fi
+
+          # ── Hurl ───────────────────────────────────────
+          if [[ -d artifacts/hurl-report ]]; then
+            mkdir -p public/hurl
+            cp -r artifacts/hurl-report/* public/hurl/
+          fi
+
+          # ── Code Metrics ───────────────────────────────
+          if [[ -d artifacts/scc-report ]]; then
+            mkdir -p public/code-metrics
+            cp -r artifacts/scc-report/* public/code-metrics/
+          fi
+
+          # ── Auto-generate index ────────────────────────
+          if [[ ! -f public/index.html ]]; then
+            cat > public/index.html << 'HEREDOC'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8"><title>CI Reports</title>
+            <style>
+              body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem}
+              h1{border-bottom:2px solid #e1e4e8;padding-bottom:.5rem}
+              ul{list-style:none;padding:0}
+              li{padding:.5rem 0;border-bottom:1px solid #f0f0f0}
+              a{text-decoration:none;color:#0366d6;font-size:1.1rem}
+              a:hover{text-decoration:underline}
+              .meta{color:#586069;font-size:.85rem}
+            </style>
+          </head>
+          <body>
+            <h1>📊 CI Reports</h1>
+            <p class="meta">Auto-generated by Code Haven CI Templates</p>
+            <ul>
+          HEREDOC
+            for dir in public/*/; do
+              name=$(basename "$dir")
+              echo "    <li><a href=\"${name}/\">📁 ${name}</a></li>" >> public/index.html
+            done
+            cat >> public/index.html << 'HEREDOC'
+            </ul>
+          </body>
+          </html>
+          HEREDOC
+          fi
+
+          echo "## 📄 Pages Content" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          find public -maxdepth 2 -type f | head -50 | sort | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: public }
+      - id: deploy
+        uses: actions/deploy-pages@v4
