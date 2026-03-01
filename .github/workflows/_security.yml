@@ -32,10 +32,6 @@ jobs:
     name: "🛡 SAST (CodeQL)"
     if: ${{ !inputs.sast_disabled }}
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
     steps:
       - uses: actions/checkout@v4
       - name: Detect CodeQL languages
@@ -95,9 +91,6 @@ jobs:
     name: "📦 Dependency Scan (Trivy FS)"
     if: ${{ !inputs.dependency_scan_disabled }}
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
       - uses: aquasecurity/trivy-action@master
@@ -118,9 +111,6 @@ jobs:
     if: ${{ !inputs.iac_scan_disabled }}
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
-    permissions:
-      contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
       - uses: checkmarx/kics-github-action@v2.1.3

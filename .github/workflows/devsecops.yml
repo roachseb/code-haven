@@ -381,10 +381,6 @@ jobs:
   docker:
     needs: detect
     if: needs.detect.outputs.has_dockerfile == 'true' && !inputs.docker_disabled
-    permissions:
-      contents: read
-      packages: write
-      security-events: write
     uses: ./.github/workflows/_docker.yml
     with:
       runner: ${{ inputs.runner }}
@@ -430,10 +426,6 @@ jobs:
   security:
     needs: detect
     if: always()
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
     uses: ./.github/workflows/_security.yml
     with:
       runner: ${{ inputs.runner }}
@@ -489,10 +481,6 @@ jobs:
   pages:
     needs: [detect, java, node, python, go, rust, dotnet, php, docker, e2e, security, quality, helm]
     if: always() && !inputs.pages_disabled
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
     uses: ./.github/workflows/_pages.yml
     with:
       runner: ${{ inputs.runner }}
@@ -510,10 +498,6 @@ jobs:
     if: >-
       always()
       && needs.detect.outputs.is_tag == 'true'
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
     uses: ./.github/workflows/_release.yml
     with:
       runner: ${{ inputs.runner }}

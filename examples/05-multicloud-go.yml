@@ -11,10 +11,12 @@ on:
     branches: [main]
 
 permissions:
-  id-token: write    # Required for OIDC
-  contents: read
-  packages: write
-  security-events: write
+  contents: write          # Checkout & releases
+  packages: write          # Docker push to GHCR
+  pages: write             # GitHub Pages deployment
+  id-token: write          # OIDC (Pages, cloud logins)
+  security-events: write   # SARIF upload (CodeQL, Trivy, KICS)
+  actions: read            # Pages deployment token
 
 jobs:
   # ── Standard CI pipeline ────────────────────────────────────

@@ -21,9 +21,6 @@ jobs:
     name: "🐳 Docker Build & Push"
     if: ${{ !inputs.docker_disabled }}
     runs-on: ${{ inputs.runner }}
-    permissions:
-      packages: write
-      contents: read
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
       image_digest: ${{ steps.build.outputs.digest }}
@@ -89,8 +86,6 @@ jobs:
     needs: docker-build
     if: always() && needs.docker-build.result == 'success' && !inputs.container_scan_disabled
     runs-on: ${{ inputs.runner }}
-    permissions:
-      security-events: write
     steps:
       - uses: aquasecurity/trivy-action@master
         with:

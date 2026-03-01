@@ -11,6 +11,14 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write          # Checkout & releases
+  packages: write          # Docker push to GHCR
+  pages: write             # GitHub Pages deployment
+  id-token: write          # OIDC (Pages, cloud logins)
+  security-events: write   # SARIF upload (CodeQL, Trivy, KICS)
+  actions: read            # Pages deployment token
+
 jobs:
   ci:
     uses: code-haven/code-haven/.github/workflows/devsecops.yml@main

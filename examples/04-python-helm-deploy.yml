@@ -11,6 +11,14 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write          # Checkout & releases
+  packages: write          # Docker push to GHCR
+  pages: write             # GitHub Pages deployment
+  id-token: write          # OIDC (Pages, cloud logins)
+  security-events: write   # SARIF upload (CodeQL, Trivy, KICS)
+  actions: read            # Pages deployment token
+
 jobs:
   # ── Standard CI pipeline ────────────────────────────────────
   ci:

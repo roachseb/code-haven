@@ -49,8 +49,6 @@ jobs:
   create-release:
     name: "🏷️ Create Release"
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: write
     outputs:
       release_id: ${{ steps.release.outputs.id }}
       upload_url: ${{ steps.release.outputs.upload_url }}
@@ -99,9 +97,6 @@ jobs:
     if: inputs.has_dockerfile == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -151,9 +146,6 @@ jobs:
     if: inputs.has_pom == 'true' || inputs.has_gradle == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -184,9 +176,6 @@ jobs:
     if: inputs.has_package_json == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -206,8 +195,6 @@ jobs:
     if: inputs.has_python == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -228,8 +215,6 @@ jobs:
     if: inputs.has_go == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: write
     strategy:
       matrix:
         goos: [linux, darwin, windows]
@@ -277,8 +262,6 @@ jobs:
     if: inputs.has_dotnet == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
-    permissions:
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
