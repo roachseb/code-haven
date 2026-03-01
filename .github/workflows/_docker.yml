@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-# Code Haven — Docker Pipeline (Build, Lint, Scan)
+# Code Haven — Docker Pipeline (Build & Scan)
 # Internal reusable workflow — called from devsecops.yml
 # ═══════════════════════════════════════════════════════════════
 name: "🐳 Docker"
@@ -9,7 +9,6 @@ on:
     inputs:
       runner: { type: string, default: 'ubuntu-latest' }
       docker_disabled: { type: boolean, default: false }
-      hadolint_disabled: { type: boolean, default: false }
       container_scan_disabled: { type: boolean, default: false }
       dockerfile_path: { type: string, default: 'Dockerfile' }
       docker_context: { type: string, default: '.' }
@@ -63,23 +62,6 @@ jobs:
             echo "**Tags:**"
             echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /'
           } >> "$GITHUB_STEP_SUMMARY"
-
-  hadolint:
-    name: "🐳 Hadolint"
-    if: ${{ !inputs.hadolint_disabled }}
-    runs-on: ${{ inputs.runner }}
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: ${{ inputs.dockerfile_path }}
-          format: sarif
-          output-file: hadolint.sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with: { sarif_file: hadolint.sarif }
-        continue-on-error: true
 
   container-scan:
     name: "🔒 Container Scan (Trivy)"

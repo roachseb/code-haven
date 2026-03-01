@@ -133,7 +133,7 @@ on:
 jobs:
 
   # ┌──────────────────────────────────────────────────────────
-  # │ DETECT — Scan the repo to figure out what's present
+  # │ STAGE 1 · DETECT — Scan the repo to figure out what's present
   # └──────────────────────────────────────────────────────────
   detect:
     name: "🔍 Detect Stack"
@@ -276,7 +276,7 @@ jobs:
           done
 
   # ═══════════════════════════════════════════════════════════
-  #   BUILD — Language-specific pipelines
+  #   STAGE 2 · BUILD — Compile, test & produce artifacts
   # ═══════════════════════════════════════════════════════════
 
   java:
@@ -375,17 +375,20 @@ jobs:
     secrets: inherit
 
   # ═══════════════════════════════════════════════════════════
-  #   DOCKER
+  #   STAGE 3 · PACKAGE — Containerise & bundle (after builds)
   # ═══════════════════════════════════════════════════════════
 
   docker:
-    needs: detect
-    if: needs.detect.outputs.has_dockerfile == 'true' && !inputs.docker_disabled
+    needs: [detect, java, node, python, go, rust, dotnet, php]
+    if: >-
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.has_dockerfile == 'true'
+      && !inputs.docker_disabled
     uses: ./.github/workflows/_docker.yml
     with:
       runner: ${{ inputs.runner }}
       docker_disabled: ${{ inputs.docker_disabled }}
-      hadolint_disabled: ${{ inputs.hadolint_disabled }}
       container_scan_disabled: ${{ inputs.container_scan_disabled }}
       dockerfile_path: ${{ inputs.dockerfile_path }}
       docker_context: ${{ inputs.docker_context }}
@@ -394,13 +397,15 @@ jobs:
     secrets: inherit
 
   # ═══════════════════════════════════════════════════════════
-  #   E2E TESTING
+  #   STAGE 4 · TEST — Scans, quality gates & E2E (after package)
   # ═══════════════════════════════════════════════════════════
 
   e2e:
-    needs: [detect, node]
+    needs: [detect, java, node, python, go, rust, dotnet, php, docker]
     if: >-
-      always() && (
+      always()
+      && needs.detect.result == 'success'
+      && (
         needs.detect.outputs.has_cypress == 'true' ||
         needs.detect.outputs.has_playwright == 'true' ||
         needs.detect.outputs.has_hurl == 'true'
@@ -419,13 +424,9 @@ jobs:
       hurl_extra_args: ${{ inputs.hurl_extra_args }}
     secrets: inherit
 
-  # ═══════════════════════════════════════════════════════════
-  #   SECURITY
-  # ═══════════════════════════════════════════════════════════
-
   security:
-    needs: detect
-    if: always()
+    needs: [detect, java, node, python, go, rust, dotnet, php, docker]
+    if: always() && needs.detect.result == 'success'
     uses: ./.github/workflows/_security.yml
     with:
       runner: ${{ inputs.runner }}
@@ -443,29 +444,29 @@ jobs:
       sqlfluff_dialect: ${{ inputs.sqlfluff_dialect }}
     secrets: inherit
 
-  # ═══════════════════════════════════════════════════════════
-  #   QUALITY & METRICS
-  # ═══════════════════════════════════════════════════════════
-
   quality:
-    needs: detect
-    if: always()
+    needs: [detect, java, node, python, go, rust, dotnet, php, docker]
+    if: always() && needs.detect.result == 'success'
     uses: ./.github/workflows/_quality.yml
     with:
       runner: ${{ inputs.runner }}
       has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}
+      has_dockerfile: ${{ needs.detect.outputs.has_dockerfile }}
       code_quality_disabled: ${{ inputs.code_quality_disabled }}
       code_metrics_disabled: ${{ inputs.code_metrics_disabled }}
       links_check_disabled: ${{ inputs.links_check_disabled }}
+      hadolint_disabled: ${{ inputs.hadolint_disabled }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
     secrets: inherit
 
-  # ═══════════════════════════════════════════════════════════
-  #   HELM / KUBERNETES
-  # ═══════════════════════════════════════════════════════════
-
+  # (Stage 3 · Package — Helm runs alongside Docker after builds)
   helm:
-    needs: detect
-    if: needs.detect.outputs.has_helm == 'true' && !inputs.helm_disabled
+    needs: [detect, java, node, python, go, rust, dotnet, php]
+    if: >-
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.has_helm == 'true'
+      && !inputs.helm_disabled
     uses: ./.github/workflows/_helm.yml
     with:
       runner: ${{ inputs.runner }}
@@ -475,12 +476,12 @@ jobs:
     secrets: inherit
 
   # ═══════════════════════════════════════════════════════════
-  #   PAGES — Aggregate all reports & deploy
+  #   STAGE 5 · DEPLOY — Documentation & environments
   # ═══════════════════════════════════════════════════════════
 
   pages:
     needs: [detect, java, node, python, go, rust, dotnet, php, docker, e2e, security, quality, helm]
-    if: always() && !inputs.pages_disabled
+    if: always() && needs.detect.result == 'success' && !inputs.pages_disabled
     uses: ./.github/workflows/_pages.yml
     with:
       runner: ${{ inputs.runner }}
@@ -490,13 +491,14 @@ jobs:
     secrets: inherit
 
   # ═══════════════════════════════════════════════════════════
-  #   RELEASE — Only on tag pushes (v*)
+  #   STAGE 6 · RELEASE — Tag-triggered packaging & publishing
   # ═══════════════════════════════════════════════════════════
 
   release:
-    needs: [detect, java, node, python, go, rust, dotnet, php, docker, security]
+    needs: [detect, java, node, python, go, rust, dotnet, php, docker, security, quality]
     if: >-
       always()
+      && needs.detect.result == 'success'
       && needs.detect.outputs.is_tag == 'true'
     uses: ./.github/workflows/_release.yml
     with:
