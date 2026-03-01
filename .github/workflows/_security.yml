@@ -7,24 +7,24 @@ name: "🛡 Security"
 on:
   workflow_call:
     inputs:
-      runner:                      { type: string, default: 'ubuntu-latest' }
-      has_sql:                     { type: string, default: 'false' }
-      sast_disabled:               { type: boolean, default: false }
-      secret_detection_disabled:   { type: boolean, default: false }
-      dependency_scan_disabled:    { type: boolean, default: false }
-      iac_scan_disabled:           { type: boolean, default: false }
-      sonar_disabled:              { type: boolean, default: false }
-      checkmarx_disabled:          { type: boolean, default: false }
-      sqlfluff_disabled:           { type: boolean, default: false }
-      sonar_host_url:              { type: string, default: '' }
-      sonar_project_key:           { type: string, default: '' }
-      checkmarx_base_url:          { type: string, default: '' }
-      sqlfluff_dialect:            { type: string, default: 'ansi' }
+      runner: { type: string, default: 'ubuntu-latest' }
+      has_sql: { type: string, default: 'false' }
+      sast_disabled: { type: boolean, default: false }
+      secret_detection_disabled: { type: boolean, default: false }
+      dependency_scan_disabled: { type: boolean, default: false }
+      iac_scan_disabled: { type: boolean, default: false }
+      sonar_disabled: { type: boolean, default: false }
+      checkmarx_disabled: { type: boolean, default: false }
+      sqlfluff_disabled: { type: boolean, default: false }
+      sonar_host_url: { type: string, default: '' }
+      sonar_project_key: { type: string, default: '' }
+      checkmarx_base_url: { type: string, default: '' }
+      sqlfluff_dialect: { type: string, default: 'ansi' }
     secrets:
-      SONAR_TOKEN:                 { required: false }
-      CHECKMARX_TOKEN:             { required: false }
-      CHECKMARX_USERNAME:          { required: false }
-      CHECKMARX_PASSWORD:          { required: false }
+      SONAR_TOKEN: { required: false }
+      CHECKMARX_TOKEN: { required: false }
+      CHECKMARX_USERNAME: { required: false }
+      CHECKMARX_PASSWORD: { required: false }
 
 jobs:
   # ── SAST (CodeQL) ───────────────────────────────────────

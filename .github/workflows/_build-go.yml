@@ -7,9 +7,9 @@ name: "🐹 Go"
 on:
   workflow_call:
     inputs:
-      runner:          { type: string, default: 'ubuntu-latest' }
+      runner: { type: string, default: 'ubuntu-latest' }
       golang_disabled: { type: boolean, default: false }
-      golang_version:  { type: string, default: 'stable' }
+      golang_version: { type: string, default: 'stable' }
 
 jobs:
   golang-build:

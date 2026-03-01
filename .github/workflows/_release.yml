@@ -16,31 +16,31 @@ name: "🚀 Release"
 on:
   workflow_call:
     inputs:
-      runner:              { type: string, default: 'ubuntu-latest' }
-      tag_name:            { type: string, default: '' }
+      runner: { type: string, default: 'ubuntu-latest' }
+      tag_name: { type: string, default: '' }
 
       # ── Stack detection results ─────────────────────────
-      has_pom:             { type: string, default: 'false' }
-      has_gradle:          { type: string, default: 'false' }
-      has_package_json:    { type: string, default: 'false' }
-      has_python:          { type: string, default: 'false' }
-      has_cargo:           { type: string, default: 'false' }
-      has_go:              { type: string, default: 'false' }
-      has_dotnet:          { type: string, default: 'false' }
-      has_dockerfile:      { type: string, default: 'false' }
-      has_mkdocs:          { type: string, default: 'false' }
+      has_pom: { type: string, default: 'false' }
+      has_gradle: { type: string, default: 'false' }
+      has_package_json: { type: string, default: 'false' }
+      has_python: { type: string, default: 'false' }
+      has_cargo: { type: string, default: 'false' }
+      has_go: { type: string, default: 'false' }
+      has_dotnet: { type: string, default: 'false' }
+      has_dockerfile: { type: string, default: 'false' }
+      has_mkdocs: { type: string, default: 'false' }
 
       # ── Build config ────────────────────────────────────
-      java_version:        { type: string, default: '21' }
-      java_distribution:   { type: string, default: 'temurin' }
-      node_version:        { type: string, default: 'lts/*' }
-      python_version:      { type: string, default: '3.x' }
-      golang_version:      { type: string, default: 'stable' }
-      rust_toolchain:      { type: string, default: 'stable' }
-      dotnet_version:      { type: string, default: '8.0.x' }
-      dockerfile_path:     { type: string, default: 'Dockerfile' }
-      docker_context:      { type: string, default: '.' }
-      docker_registry:     { type: string, default: 'ghcr.io' }
+      java_version: { type: string, default: '21' }
+      java_distribution: { type: string, default: 'temurin' }
+      node_version: { type: string, default: 'lts/*' }
+      python_version: { type: string, default: '3.x' }
+      golang_version: { type: string, default: 'stable' }
+      rust_toolchain: { type: string, default: 'stable' }
+      dotnet_version: { type: string, default: '8.0.x' }
+      dockerfile_path: { type: string, default: 'Dockerfile' }
+      docker_context: { type: string, default: '.' }
+      docker_registry: { type: string, default: 'ghcr.io' }
 
 jobs:
   # ┌──────────────────────────────────────────────────────────

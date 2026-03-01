@@ -7,18 +7,18 @@ name: "🧪 E2E Tests"
 on:
   workflow_call:
     inputs:
-      runner:               { type: string, default: 'ubuntu-latest' }
-      has_cypress:          { type: string, default: 'false' }
-      has_playwright:       { type: string, default: 'false' }
-      has_hurl:             { type: string, default: 'false' }
-      cypress_disabled:     { type: boolean, default: false }
-      playwright_disabled:  { type: boolean, default: false }
-      hurl_disabled:        { type: boolean, default: false }
-      node_version:         { type: string, default: 'lts/*' }
-      cypress_browsers:     { type: string, default: 'chrome' }
-      hurl_extra_args:      { type: string, default: '' }
+      runner: { type: string, default: 'ubuntu-latest' }
+      has_cypress: { type: string, default: 'false' }
+      has_playwright: { type: string, default: 'false' }
+      has_hurl: { type: string, default: 'false' }
+      cypress_disabled: { type: boolean, default: false }
+      playwright_disabled: { type: boolean, default: false }
+      hurl_disabled: { type: boolean, default: false }
+      node_version: { type: string, default: 'lts/*' }
+      cypress_browsers: { type: string, default: 'chrome' }
+      hurl_extra_args: { type: string, default: '' }
     secrets:
-      CYPRESS_RECORD_KEY:   { required: false }
+      CYPRESS_RECORD_KEY: { required: false }
 
 jobs:
   # ── Cypress ──────────────────────────────────────────────

@@ -7,9 +7,9 @@ name: "⎈ Helm"
 on:
   workflow_call:
     inputs:
-      runner:           { type: string, default: 'ubuntu-latest' }
-      helm_disabled:    { type: boolean, default: false }
-      helm_chart_path:  { type: string, default: '.' }
+      runner: { type: string, default: 'ubuntu-latest' }
+      helm_disabled: { type: boolean, default: false }
+      helm_chart_path: { type: string, default: '.' }
       helm_values_files: { type: string, default: 'values.yaml' }
 
 jobs:

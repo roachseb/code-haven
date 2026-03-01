@@ -7,11 +7,11 @@ name: "🐘 PHP"
 on:
   workflow_call:
     inputs:
-      runner:         { type: string, default: 'ubuntu-latest' }
-      php_disabled:   { type: boolean, default: false }
-      php_version:    { type: string, default: '8.3' }
+      runner: { type: string, default: 'ubuntu-latest' }
+      php_disabled: { type: boolean, default: false }
+      php_version: { type: string, default: '8.3' }
       php_extensions: { type: string, default: 'mbstring, xml, xdebug' }
-      has_twig:       { type: string, default: 'false' }
+      has_twig: { type: string, default: 'false' }
 
 jobs:
   php-test:

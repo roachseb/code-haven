@@ -7,13 +7,13 @@ name: "✨ Quality"
 on:
   workflow_call:
     inputs:
-      runner:                 { type: string, default: 'ubuntu-latest' }
-      has_mkdocs:             { type: string, default: 'false' }
-      code_quality_disabled:  { type: boolean, default: false }
-      code_metrics_disabled:  { type: boolean, default: false }
-      links_check_disabled:   { type: boolean, default: false }
+      runner: { type: string, default: 'ubuntu-latest' }
+      has_mkdocs: { type: string, default: 'false' }
+      code_quality_disabled: { type: boolean, default: false }
+      code_metrics_disabled: { type: boolean, default: false }
+      links_check_disabled: { type: boolean, default: false }
     secrets:
-      CC_TEST_REPORTER_ID:    { required: false }
+      CC_TEST_REPORTER_ID: { required: false }
 
 jobs:
   code-quality:

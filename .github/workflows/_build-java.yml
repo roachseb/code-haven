@@ -7,17 +7,17 @@ name: "☕ Java"
 on:
   workflow_call:
     inputs:
-      runner:            { type: string, default: 'ubuntu-latest' }
-      has_pom:           { type: string, default: 'false' }
-      has_gradle:        { type: string, default: 'false' }
-      maven_disabled:    { type: boolean, default: false }
-      gradle_disabled:   { type: boolean, default: false }
-      java_version:      { type: string, default: '21' }
+      runner: { type: string, default: 'ubuntu-latest' }
+      has_pom: { type: string, default: 'false' }
+      has_gradle: { type: string, default: 'false' }
+      maven_disabled: { type: boolean, default: false }
+      gradle_disabled: { type: boolean, default: false }
+      java_version: { type: string, default: '21' }
       java_distribution: { type: string, default: 'temurin' }
-      maven_cli_opts:    { type: string, default: '--batch-mode --errors --fail-at-end --show-version' }
-      maven_build_cmd:   { type: string, default: 'install' }
-      java_formatter:    { type: string, default: 'revelc' }
-      gradle_build_cmd:  { type: string, default: 'build' }
+      maven_cli_opts: { type: string, default: '--batch-mode --errors --fail-at-end --show-version' }
+      maven_build_cmd: { type: string, default: 'install' }
+      java_formatter: { type: string, default: 'revelc' }
+      gradle_build_cmd: { type: string, default: 'build' }
 
 jobs:
   # ── Maven ────────────────────────────────────────────────

@@ -7,9 +7,9 @@ name: "🔷 .NET"
 on:
   workflow_call:
     inputs:
-      runner:          { type: string, default: 'ubuntu-latest' }
+      runner: { type: string, default: 'ubuntu-latest' }
       dotnet_disabled: { type: boolean, default: false }
-      dotnet_version:  { type: string, default: '8.0.x' }
+      dotnet_version: { type: string, default: '8.0.x' }
 
 jobs:
   dotnet-build:

@@ -7,14 +7,14 @@ name: "🐳 Docker"
 on:
   workflow_call:
     inputs:
-      runner:                 { type: string, default: 'ubuntu-latest' }
-      docker_disabled:        { type: boolean, default: false }
-      hadolint_disabled:      { type: boolean, default: false }
+      runner: { type: string, default: 'ubuntu-latest' }
+      docker_disabled: { type: boolean, default: false }
+      hadolint_disabled: { type: boolean, default: false }
       container_scan_disabled: { type: boolean, default: false }
-      dockerfile_path:        { type: string, default: 'Dockerfile' }
-      docker_context:         { type: string, default: '.' }
-      docker_tag_extra:       { type: string, default: 'latest' }
-      docker_registry:        { type: string, default: 'ghcr.io' }
+      dockerfile_path: { type: string, default: 'Dockerfile' }
+      docker_context: { type: string, default: '.' }
+      docker_tag_extra: { type: string, default: 'latest' }
+      docker_registry: { type: string, default: 'ghcr.io' }
 
 jobs:
   docker-build:

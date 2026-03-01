@@ -9,10 +9,10 @@ name: "📄 Pages"
 on:
   workflow_call:
     inputs:
-      runner:            { type: string, default: 'ubuntu-latest' }
-      pages_disabled:    { type: boolean, default: false }
+      runner: { type: string, default: 'ubuntu-latest' }
+      pages_disabled: { type: boolean, default: false }
       is_default_branch: { type: string, default: 'false' }
-      is_tag:            { type: string, default: 'false' }
+      is_tag: { type: string, default: 'false' }
 
 jobs:
   pages:

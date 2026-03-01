@@ -7,7 +7,7 @@ name: "🦀 Rust"
 on:
   workflow_call:
     inputs:
-      runner:        { type: string, default: 'ubuntu-latest' }
+      runner: { type: string, default: 'ubuntu-latest' }
       rust_disabled: { type: boolean, default: false }
       rust_toolchain: { type: string, default: 'stable' }
 

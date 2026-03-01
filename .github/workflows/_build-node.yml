@@ -7,14 +7,14 @@ name: "📦 Node"
 on:
   workflow_call:
     inputs:
-      runner:           { type: string, default: 'ubuntu-latest' }
-      has_angular:      { type: string, default: 'false' }
-      npm_disabled:     { type: boolean, default: false }
+      runner: { type: string, default: 'ubuntu-latest' }
+      has_angular: { type: string, default: 'false' }
+      npm_disabled: { type: boolean, default: false }
       angular_disabled: { type: boolean, default: false }
-      node_version:     { type: string, default: 'lts/*' }
-      node_build_args:  { type: string, default: 'run build' }
-      node_test_args:   { type: string, default: 'run test' }
-      package_manager:  { type: string, default: 'npm' }
+      node_version: { type: string, default: 'lts/*' }
+      node_build_args: { type: string, default: 'run build' }
+      node_test_args: { type: string, default: 'run test' }
+      package_manager: { type: string, default: 'npm' }
 
 jobs:
   # ── Install ──────────────────────────────────────────────
