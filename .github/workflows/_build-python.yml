@@ -115,7 +115,7 @@ jobs:
         with: { python-version: '3.x', cache: pip }
       - name: Build docs
         run: |
-          [[ -f requirements.txt ]] && pip install -r requirements.txt || pip install mkdocs-material
+          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; else pip install mkdocs-material; fi
           mkdocs build --strict --verbose --site-dir mkdocs-site
       - uses: actions/upload-artifact@v4
         with: { name: mkdocs-site, path: mkdocs-site, retention-days: 7 }

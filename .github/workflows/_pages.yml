@@ -151,9 +151,11 @@ jobs:
           HEREDOC
           fi
 
-          echo "## 📄 Pages Content" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          find public -maxdepth 2 -type f | head -50 | sort | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 📄 Pages Content"
+            echo ""
+            find public -maxdepth 2 -type f | head -50 | sort | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-pages-artifact@v3
         with: { path: public }

@@ -150,10 +150,11 @@ jobs:
       - run: pip install sqlfluff
       - name: Lint SQL
         run: |
-          sqlfluff lint --dialect ${{ inputs.sqlfluff_dialect }} \
-            --format github-annotation-native \
-            $(find . -name '*.sql' | head -100) || true
-          sqlfluff lint --dialect ${{ inputs.sqlfluff_dialect }} \
+          find . -name '*.sql' | head -100 | xargs sqlfluff lint \
+            --dialect ${{ inputs.sqlfluff_dialect }} \
+            --format github-annotation-native || true
+          find . -name '*.sql' | head -100 | xargs sqlfluff lint \
+            --dialect ${{ inputs.sqlfluff_dialect }} \
             --format json > sqlfluff-report.json || true
       - uses: actions/upload-artifact@v4
         if: always()

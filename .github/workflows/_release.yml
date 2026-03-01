@@ -69,12 +69,14 @@ jobs:
             RANGE="${{ inputs.tag_name }}"
           fi
 
-          echo "## What's Changed" > changelog.md
-          echo "" >> changelog.md
-          git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges 2>/dev/null >> changelog.md || true
-          echo "" >> changelog.md
-          echo "" >> changelog.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-initial}...${{ inputs.tag_name }}" >> changelog.md
+          {
+            echo "## What's Changed"
+            echo ""
+            git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges 2>/dev/null || true
+            echo ""
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-initial}...${{ inputs.tag_name }}"
+          } > changelog.md
 
           cat changelog.md
 
@@ -134,10 +136,12 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 🐳 Release Image" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Tags:**" >> "$GITHUB_STEP_SUMMARY"
-          echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🐳 Release Image"
+            echo ""
+            echo "**Tags:**"
+            echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ┌──────────────────────────────────────────────────────────
   # │ JAVA — Publish to GitHub Packages (Maven)
@@ -300,15 +304,17 @@ jobs:
     steps:
       - name: Summary
         run: |
-          echo "## 🚀 Release ${{ inputs.tag_name }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Step | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| GitHub Release | ${{ needs.create-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Docker Image   | ${{ needs.docker-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Java Package   | ${{ needs.java-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| npm Package    | ${{ needs.node-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Python Package | ${{ needs.python-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Go Binaries    | ${{ needs.go-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Rust Crate     | ${{ needs.rust-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| NuGet Package  | ${{ needs.dotnet-release.result == 'success' && '✅' || '⬜ skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🚀 Release ${{ inputs.tag_name }}"
+            echo ""
+            echo "| Step | Status |"
+            echo "|------|--------|"
+            echo "| GitHub Release | ${{ needs.create-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| Docker Image   | ${{ needs.docker-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| Java Package   | ${{ needs.java-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| npm Package    | ${{ needs.node-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| Python Package | ${{ needs.python-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| Go Binaries    | ${{ needs.go-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| Rust Crate     | ${{ needs.rust-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| NuGet Package  | ${{ needs.dotnet-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

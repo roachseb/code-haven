@@ -97,10 +97,10 @@ jobs:
           sudo dpkg -i /tmp/hurl.deb
       - name: Run Hurl tests
         run: |
-          hurl --test --color --report-html hurl-report \
+          find . -name '*.hurl' | sort | xargs hurl --test --color \
+            --report-html hurl-report \
             --report-junit hurl-results.xml \
-            ${{ inputs.hurl_extra_args }} \
-            $(find . -name '*.hurl' | sort)
+            ${{ inputs.hurl_extra_args }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: reviewdog/action-actionlint@v1
         with:
-          fail_on_error: true
+          fail_level: error
 
   # ═══════════════════════════════════════════════════════════
   #  🐕  DOG-FOODING — Code Haven uses its own pipeline

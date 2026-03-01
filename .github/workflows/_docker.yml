@@ -58,12 +58,14 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Summary
         run: |
-          echo "## 🐳 Docker Image" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Tags:**" >> "$GITHUB_STEP_SUMMARY"
-          echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🐳 Docker Image"
+            echo ""
+            echo "**Digest:** \`${{ steps.build.outputs.digest }}\`"
+            echo ""
+            echo "**Tags:**"
+            echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   hadolint:
     name: "🐳 Hadolint"

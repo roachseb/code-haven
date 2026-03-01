@@ -35,7 +35,7 @@ jobs:
           case "${{ inputs.package_manager }}" in
             pnpm) pnpm install --frozen-lockfile ;;
             yarn) yarn install --frozen-lockfile ;;
-            npm)  [[ -f package-lock.json ]] && npm ci || npm install ;;
+            npm)  if [[ -f package-lock.json ]]; then npm ci; else npm install; fi ;;
           esac
       - uses: actions/upload-artifact@v4
         with:
