@@ -428,7 +428,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════
 
   security:
-    needs: [detect, java, node, python, go, rust, dotnet, php]
+    needs: detect
     if: always()
     permissions:
       contents: read

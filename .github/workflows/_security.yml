@@ -33,7 +33,9 @@ jobs:
     if: ${{ !inputs.sast_disabled }}
     runs-on: ${{ inputs.runner }}
     permissions:
+      contents: read
       security-events: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: github/codeql-action/init@v3
@@ -60,6 +62,7 @@ jobs:
     if: ${{ !inputs.dependency_scan_disabled }}
     runs-on: ${{ inputs.runner }}
     permissions:
+      contents: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +84,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     permissions:
+      contents: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
