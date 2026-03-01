@@ -3,7 +3,7 @@
 > **One line to rule them all.** A zero-config, auto-detecting CI/CD pipeline system for GitHub Actions.
 > Drop your code, add one workflow line, and the pipeline figures out the rest.
 
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://code-haven.github.io/code-haven)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://roachseb.github.io/code-haven/)
 
 ---
 
