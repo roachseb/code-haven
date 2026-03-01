@@ -18,9 +18,9 @@ name: CI
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, master, 'feat/**']
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +39,7 @@ permissions:
   id-token: write
   security-events: write
   actions: read
+  packages: write   # required by _docker.yml → docker-build (GHCR push)
 
 jobs:
 
@@ -92,4 +93,5 @@ jobs:
       id-token: write
       security-events: write
       actions: read
+      packages: write   # required by _docker.yml → docker-build (GHCR push)
     secrets: inherit
