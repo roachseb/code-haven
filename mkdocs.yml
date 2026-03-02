@@ -87,3 +87,4 @@ nav:
     - Code Quality: actions/code-quality.md
   - Examples: examples.md
   - Migration Guide: migration.md
+  - Project Review: review.md
