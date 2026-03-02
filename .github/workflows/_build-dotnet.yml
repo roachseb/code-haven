@@ -21,6 +21,15 @@ jobs:
         with: { dotnet-version: '${{ inputs.dotnet_version }}' }
       - run: dotnet restore
       - run: dotnet build --no-restore
+      - name: Publish for Docker
+        run: dotnet publish --no-build --configuration Release -o publish
+      - name: Upload Docker inputs (.NET)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-input-dotnet
+          path: publish/**
+          if-no-files-found: ignore
+          retention-days: 1
 
   dotnet-test:
     name: "🔷 .NET Test"

@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write          # Checkout & releases
+  checks: write            # dorny/test-reporter → check runs
+  pull-requests: write     # PR annotations & comment updates
   packages: write          # Docker push to GHCR
   pages: write             # GitHub Pages deployment
   id-token: write          # OIDC (Pages, cloud logins)

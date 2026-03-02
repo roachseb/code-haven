@@ -21,6 +21,20 @@ jobs:
         with: { toolchain: '${{ inputs.rust_toolchain }}', components: 'clippy, rustfmt' }
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --verbose
+      - name: Upload Docker inputs (Rust)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-input-rust
+          path: |
+            target/release/*
+            !target/release/.fingerprint
+            !target/release/build
+            !target/release/deps
+            !target/release/examples
+            !target/release/incremental
+            !target/release/.cargo-lock
+          if-no-files-found: ignore
+          retention-days: 1
       - run: cargo test --verbose 2>&1 | tee test-output.txt
       - name: Summary
         if: always()

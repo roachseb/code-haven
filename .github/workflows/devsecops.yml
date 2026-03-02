@@ -80,6 +80,7 @@ on:
       java_distribution: { type: string, default: 'temurin' }
       maven_cli_opts: { type: string, default: '--batch-mode --errors --fail-at-end --show-version' }
       maven_build_cmd: { type: string, default: 'install' }
+      java_doc_enabled: { type: boolean, default: false }
       java_formatter: { type: string, default: 'revelc' }
       gradle_build_cmd: { type: string, default: 'build' }
 
@@ -297,6 +298,7 @@ jobs:
       maven_build_cmd: ${{ inputs.maven_build_cmd }}
       java_formatter: ${{ inputs.java_formatter }}
       gradle_build_cmd: ${{ inputs.gradle_build_cmd }}
+      java_doc_enabled: ${{ inputs.java_doc_enabled }}
     secrets: inherit
 
   node:

@@ -44,6 +44,8 @@ concurrency:
 # GitHub Actions doesn't grant what you don't ask for here.
 permissions:
   contents: write      # checkout + GitHub Release creation
+  checks: write        # dorny/test-reporter → check runs
+  pull-requests: write # PR annotations/comment updates
   pages: write         # _pages.yml → GitHub Pages deploy
   id-token: write      # _pages.yml + PyPI trusted publisher
   security-events: write  # _security.yml → CodeQL SARIF upload
@@ -100,6 +102,8 @@ jobs:
     uses: ./.github/workflows/devsecops.yml
     permissions:
       contents: write        # checkout + GitHub Release creation
+      checks: write          # dorny/test-reporter → check runs
+      pull-requests: write   # PR annotations/comment updates
       pages: write           # GitHub Pages deploy
       id-token: write        # Pages + PyPI trusted publisher
       security-events: write # CodeQL SARIF upload

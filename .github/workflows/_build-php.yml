@@ -36,13 +36,18 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: php-reports, path: php-reports, retention-days: 7 }
-      - uses: dorny/test-reporter@v1
-        if: always()
+      - uses: dorny/test-reporter@v2
+        if: >-
+          !cancelled() &&
+          (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) &&
+          github.actor != 'dependabot[bot]'
+        continue-on-error: true
         with:
           name: PHP Tests
           path: php-reports/junit.xml
           reporter: java-junit
           fail-on-error: false
+          fail-on-empty: false
 
   php-twig-lint:
     name: "🐘 PHP Twig Lint"

@@ -60,6 +60,7 @@ All toggles follow the pattern `<stack>_disabled` — set to `true` to skip:
 | `maven_build_cmd` | `install` | Maven build goal |
 | `java_formatter` | `revelc` | Java formatter: `revelc`, `spotify`, or `disabled` |
 | `gradle_build_cmd` | `build` | Gradle build task |
+| `java_doc_enabled` | `false` | Run Javadoc job (set to `true` to enable Javadoc generation) |
 
 ### Node.js
 

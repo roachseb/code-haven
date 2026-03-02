@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write          # Checkout & releases
+  checks: write            # dorny/test-reporter → check runs
+  pull-requests: write     # PR annotations & comment updates
   packages: write          # Docker push to GHCR
   pages: write             # GitHub Pages deployment
   id-token: write          # OIDC (Pages, cloud logins)
@@ -27,6 +29,7 @@ jobs:
       java_distribution: 'temurin'
       maven_cli_opts: '--batch-mode --errors --fail-at-end --show-version -DskipITs'
       maven_build_cmd: 'verify'
+      java_doc_enabled: true
       java_formatter: 'spotify'
       sonar_host_url: 'https://sonarqube.example.com'
       sonar_project_key: 'my-spring-boot-app'

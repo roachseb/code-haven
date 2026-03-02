@@ -19,6 +19,17 @@ on:
   pull_request:
     branches: [main]
 
+# ── Required permissions for all pipeline features ──
+permissions:
+  contents: write          # Checkout & releases
+  checks: write            # dorny/test-reporter → check runs
+  pull-requests: write     # PR annotations & comment updates
+  packages: write          # Docker push to GHCR
+  pages: write             # GitHub Pages deployment
+  id-token: write          # OIDC (Pages, cloud logins)
+  security-events: write   # SARIF upload (CodeQL, Trivy, KICS)
+  actions: read            # Pages deployment token
+
 jobs:
   ci:
     uses: code-haven/.github/workflows/devsecops.yml@main
@@ -43,6 +54,17 @@ Commit and push. The pipeline will:
 Override defaults for your specific needs:
 
 ```yaml
+# ── Required permissions ──
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
 jobs:
   ci:
     uses: code-haven/.github/workflows/devsecops.yml@main
