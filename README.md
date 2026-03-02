@@ -178,6 +178,10 @@ All stacks can be disabled with `<stack>_disabled: true`:
 
 Full docs are available at the [documentation site](https://code-haven.github.io/code-haven) (powered by MkDocs Material), or browse the [`docs/`](docs/) folder directly.
 
+### External review
+
+A structured improvement review is available at [`docs/review-2026-03.md`](docs/review-2026-03.md).
+
 ---
 
 ## 🔄 Pipeline Lifecycle
@@ -232,7 +236,7 @@ scans, and deploys to GitHub Pages — all through the same system your repos us
 
 ---
 
-## �🔀 Coming from GitLab?
+## 🔀 Coming from GitLab?
 
 This project is the GitHub Actions equivalent of the Code Haven Farm GitLab CI templates. See the [Migration Guide](docs/migration.md) and [MIGRATION-REPORT.md](MIGRATION-REPORT.md) for the full mapping.
 
