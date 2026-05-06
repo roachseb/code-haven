@@ -95,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run actionlint
-        uses: rhysd/actionlint@v1
+        uses: raven-actions/actionlint@v2
         with:
           flags: '-format "{{json .}}"'
         continue-on-error: true
