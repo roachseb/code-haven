@@ -30,6 +30,7 @@ Consumer Repo                          Code Haven Templates
 │       ├── has_python? ───► _build-python.yml                │
 │       ├── has_go? ───────► _build-go.yml                    │
 │       ├── has_cargo? ────► _build-rust.yml                  │
+│       ├── has_cmake? ────► _build-cpp.yml                   │
 │       ├── has_dotnet? ───► _build-dotnet.yml                │
 │       ├── has_php? ──────► _build-php.yml                   │
 │       ├── has_dockerfile? ► _docker.yml                     │
@@ -48,6 +49,7 @@ Consumer Repo                          Code Haven Templates
 ├── devsecops.yml          # 🎯 The entry point (consumers call this)
 ├── _build-java.yml        # ☕ Maven + Gradle + formatting + Javadoc
 ├── _build-node.yml        # 📦 npm/yarn/pnpm + Angular
+├── _build-cpp.yml         # 🔧 CMake + Conan + clang-tidy + clang-format
 ├── _build-python.yml      # 🐍 Python + Django + Tox + MkDocs + PyPI
 ├── _build-go.yml          # 🐹 Go build/test/lint/fmt/vet
 ├── _build-rust.yml        # 🦀 Rust build/test/fmt/clippy/doc
@@ -64,8 +66,10 @@ Consumer Repo                          Code Haven Templates
 
 actions/
 ├── toolkit/               # 🔧 Environment init (CA certs, debug, scripts)
-├── cloud-login/           # ☁️ AWS / Azure / GCP OIDC authentication
+├── cloud-login/           # ☁️ AWS / Azure / GCP OIDC + Artifact Registry auth
 ├── k8s-deploy/            # 🚀 Helm deployment with auto-rollback
+├── ssh-deploy/            # 🔑 SSH deployment to VMs / bare metal
+├── cpp-package/           # 📦 Conan 2.x package build + upload
 └── code-quality/          # ✨ CodeClimate config generator
 ```
 
@@ -103,8 +107,9 @@ calls `devsecops.yml` — the exact same orchestrator every consumer uses.
 
 When the pipeline runs on this repo, the detect step finds `mkdocs.yml` and
 triggers the Python sub-workflow (MkDocs build), then security scans (Gitleaks,
-CodeQL), quality checks (link check, code metrics), and finally deploys the
-documentation site to GitHub Pages.
+CodeQL, Semgrep, OSV Scanner, OSSF Scorecard), quality checks (link check,
+code metrics, actionlint), and finally deploys the documentation site to
+GitHub Pages.
 
 This is deliberate: the best way to verify a pipeline framework works is to
 run it on itself. If Code Haven breaks Code Haven, we know immediately.

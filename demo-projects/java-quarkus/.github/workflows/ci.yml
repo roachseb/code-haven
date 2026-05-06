@@ -1,0 +1,95 @@
+# ── Code Haven Demo: Quarkus (Red Hat) ───────────────────────
+# Demonstrates Java Quarkus with JVM and native build support.
+# Pipeline auto-detects pom.xml + Dockerfile.
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      java_version: '21'
+      java_distribution: 'temurin'
+      maven_build_cmd: 'install'
+      java_doc_enabled: true
+      docker_registry: 'ghcr.io'
+      # Disable unrelated stacks
+      npm_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      golang_disabled: true
+      cpp_disabled: true
+    secrets: inherit
+
+  # ── Optional: Native build verification ─────────────────
+  native-build:
+    name: "🔥 Quarkus Native Build"
+    needs: ci
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build native image
+        run: mvn package -Pnative -DskipTests -B
+      - name: Upload native binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-native-binary
+          path: target/*-runner
+          retention-days: 7
+      - name: Summary
+        run: |
+          SIZE=$(du -sh target/*-runner | cut -f1)
+          {
+            echo "## 🔥 Native Build Results"
+            echo "- Binary size: **$SIZE**"
+            echo "- Profile: native (GraalVM)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Native Docker image (optional) ──────────────────────
+  native-docker:
+    name: "🐳 Native Docker Image"
+    needs: native-build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: BUILD_TYPE=native
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}-native
+            ghcr.io/${{ github.repository }}:native-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -72,6 +72,7 @@ nav:
     - Python / Django: workflows/python.md
     - Go: workflows/go.md
     - Rust: workflows/rust.md
+    - "C/C++": workflows/cpp.md
     - .NET: workflows/dotnet.md
     - PHP: workflows/php.md
     - Docker: workflows/docker.md
@@ -84,6 +85,11 @@ nav:
     - Toolkit: actions/toolkit.md
     - Cloud Login: actions/cloud-login.md
     - K8s Deploy: actions/k8s-deploy.md
+    - SSH Deploy: actions/ssh-deploy.md
+    - "C++ Package": actions/cpp-package.md
     - Code Quality: actions/code-quality.md
+  - Strategies:
+    - Branch Packaging: branch-packaging.md
+    - Cross-Project Dependencies: cross-project-deps.md
   - Examples: examples.md
   - Migration Guide: migration.md

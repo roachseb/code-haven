@@ -22,6 +22,7 @@ name: DevSecOps
 #   ├── _build-rust.yml      Rust build/test/fmt/clippy/doc
 #   ├── _build-dotnet.yml    .NET build/test/format/publish
 #   ├── _build-php.yml       PHP test + Twig lint
+#   ├── _build-cpp.yml       C/C++ CMake + Conan + clang-tidy
 #   ├── _docker.yml          Docker build + Hadolint + Trivy
 #   ├── _test-e2e.yml        Cypress + Playwright + Hurl
 #   ├── _security.yml        CodeQL + Gitleaks + Trivy + KICS + Sonar + Checkmarx
@@ -54,6 +55,7 @@ on:
       rust_disabled: { type: boolean, default: false }
       dotnet_disabled: { type: boolean, default: false }
       php_disabled: { type: boolean, default: false }
+      cpp_disabled: { type: boolean, default: false }
       docker_disabled: { type: boolean, default: false }
       helm_disabled: { type: boolean, default: false }
       cypress_disabled: { type: boolean, default: false }
@@ -70,10 +72,15 @@ on:
       sonar_disabled: { type: boolean, default: false }
       checkmarx_disabled: { type: boolean, default: false }
       sqlfluff_disabled: { type: boolean, default: false }
+      semgrep_disabled: { type: boolean, default: false }
+      osv_disabled: { type: boolean, default: false }
+      license_check_disabled: { type: boolean, default: false }
+      scorecard_disabled: { type: boolean, default: false }
       links_check_disabled: { type: boolean, default: false }
       code_quality_disabled: { type: boolean, default: false }
       code_metrics_disabled: { type: boolean, default: false }
       hadolint_disabled: { type: boolean, default: false }
+      actionlint_disabled: { type: boolean, default: false }
 
       # ── Java / Maven ───────────────────────────────────
       java_version: { type: string, default: '21' }
@@ -98,6 +105,14 @@ on:
       dotnet_version: { type: string, default: '8.0.x' }
       php_version: { type: string, default: '8.3' }
       php_extensions: { type: string, default: 'mbstring, xml, xdebug' }
+
+      # ── C/C++ ──────────────────────────────────────────
+      cpp_standard: { type: string, default: '17' }
+      cpp_build_type: { type: string, default: 'Release' }
+      cpp_compiler: { type: string, default: 'gcc' }
+      cpp_compiler_version: { type: string, default: '' }
+      cpp_conan_remote: { type: string, default: '' }
+      cpp_coverage_enabled: { type: boolean, default: false }
 
       # ── Docker ──────────────────────────────────────────
       dockerfile_path: { type: string, default: 'Dockerfile' }
@@ -127,6 +142,8 @@ on:
       AWS_ROLE_ARN: { required: false }
       CC_TEST_REPORTER_ID: { required: false }
       CYPRESS_RECORD_KEY: { required: false }
+      CONAN_LOGIN_USERNAME: { required: false }
+      CONAN_PASSWORD: { required: false }
 
 # ═══════════════════════════════════════════════════════════════
 # JOBS — Detect stack, then delegate to domain workflows
@@ -159,6 +176,9 @@ jobs:
       has_tox: ${{ steps.check.outputs.has_tox }}
       has_django: ${{ steps.check.outputs.has_django }}
       has_twig: ${{ steps.check.outputs.has_twig }}
+      has_cmake: ${{ steps.check.outputs.has_cmake }}
+      has_conan: ${{ steps.check.outputs.has_conan }}
+      has_github_workflows: ${{ steps.check.outputs.has_github_workflows }}
       package_manager: ${{ steps.check.outputs.package_manager }}
       is_default_branch: ${{ steps.context.outputs.is_default_branch }}
       is_tag: ${{ steps.context.outputs.is_tag }}
@@ -226,6 +246,9 @@ jobs:
             echo "has_tox=$(check_any tox.ini tox.toml)"
             echo "has_django=$(check_file manage.py)"
             echo "has_twig=$(check_glob '*.twig')"
+            echo "has_cmake=$(check_glob 'CMakeLists.txt')"
+            echo "has_conan=$(check_any conanfile.py conanfile.txt)"
+            echo "has_github_workflows=$([[ -d .github/workflows ]] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
 
           # Detect Node package manager
@@ -271,6 +294,9 @@ jobs:
           has_tox=${{ steps.check.outputs.has_tox }}
           has_django=${{ steps.check.outputs.has_django }}
           has_twig=${{ steps.check.outputs.has_twig }}
+          has_cmake=${{ steps.check.outputs.has_cmake }}
+          has_conan=${{ steps.check.outputs.has_conan }}
+          has_github_workflows=${{ steps.check.outputs.has_github_workflows }}
           EOF
             [[ "$val" == "true" ]] && icon="✅" || icon="⬜"
             echo "| \`$key\` | $icon $val |" >> "$GITHUB_STEP_SUMMARY"
@@ -376,12 +402,28 @@ jobs:
       has_twig: ${{ needs.detect.outputs.has_twig }}
     secrets: inherit
 
+  cpp:
+    needs: detect
+    if: needs.detect.outputs.has_cmake == 'true' && !inputs.cpp_disabled
+    uses: ./.github/workflows/_build-cpp.yml
+    with:
+      runner: ${{ inputs.runner }}
+      cpp_disabled: ${{ inputs.cpp_disabled }}
+      cpp_standard: ${{ inputs.cpp_standard }}
+      cpp_build_type: ${{ inputs.cpp_build_type }}
+      cpp_compiler: ${{ inputs.cpp_compiler }}
+      cpp_compiler_version: ${{ inputs.cpp_compiler_version }}
+      cpp_conan_remote: ${{ inputs.cpp_conan_remote }}
+      cpp_coverage_enabled: ${{ inputs.cpp_coverage_enabled }}
+      has_conan: ${{ needs.detect.outputs.has_conan }}
+    secrets: inherit
+
   # ═══════════════════════════════════════════════════════════
   #   STAGE 3 · PACKAGE — Containerise & bundle (after builds)
   # ═══════════════════════════════════════════════════════════
 
   docker:
-    needs: [detect, java, node, python, go, rust, dotnet, php]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp]
     if: >-
       always()
       && needs.detect.result == 'success'
@@ -403,7 +445,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════
 
   e2e:
-    needs: [detect, java, node, python, go, rust, dotnet, php, docker]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp, docker]
     if: >-
       always()
       && needs.detect.result == 'success'
@@ -427,7 +469,7 @@ jobs:
     secrets: inherit
 
   security:
-    needs: [detect, java, node, python, go, rust, dotnet, php, docker]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp, docker]
     if: always() && needs.detect.result == 'success'
     uses: ./.github/workflows/_security.yml
     with:
@@ -444,26 +486,32 @@ jobs:
       sonar_project_key: ${{ inputs.sonar_project_key }}
       checkmarx_base_url: ${{ inputs.checkmarx_base_url }}
       sqlfluff_dialect: ${{ inputs.sqlfluff_dialect }}
+      semgrep_disabled: ${{ inputs.semgrep_disabled }}
+      osv_disabled: ${{ inputs.osv_disabled }}
+      license_check_disabled: ${{ inputs.license_check_disabled }}
+      scorecard_disabled: ${{ inputs.scorecard_disabled }}
     secrets: inherit
 
   quality:
-    needs: [detect, java, node, python, go, rust, dotnet, php, docker]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp, docker]
     if: always() && needs.detect.result == 'success'
     uses: ./.github/workflows/_quality.yml
     with:
       runner: ${{ inputs.runner }}
       has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}
       has_dockerfile: ${{ needs.detect.outputs.has_dockerfile }}
+      has_github_workflows: ${{ needs.detect.outputs.has_github_workflows }}
       code_quality_disabled: ${{ inputs.code_quality_disabled }}
       code_metrics_disabled: ${{ inputs.code_metrics_disabled }}
       links_check_disabled: ${{ inputs.links_check_disabled }}
       hadolint_disabled: ${{ inputs.hadolint_disabled }}
+      actionlint_disabled: ${{ inputs.actionlint_disabled }}
       dockerfile_path: ${{ inputs.dockerfile_path }}
     secrets: inherit
 
   # (Stage 3 · Package — Helm runs alongside Docker after builds)
   helm:
-    needs: [detect, java, node, python, go, rust, dotnet, php]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp]
     if: >-
       always()
       && needs.detect.result == 'success'
@@ -482,7 +530,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════
 
   pages:
-    needs: [detect, java, node, python, go, rust, dotnet, php, docker, e2e, security, quality, helm]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp, docker, e2e, security, quality, helm]
     if: always() && needs.detect.result == 'success' && !inputs.pages_disabled
     uses: ./.github/workflows/_pages.yml
     with:
@@ -497,7 +545,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════
 
   release:
-    needs: [detect, java, node, python, go, rust, dotnet, php, docker, security, quality]
+    needs: [detect, java, node, python, go, rust, dotnet, php, cpp, docker, security, quality]
     if: >-
       always()
       && needs.detect.result == 'success'
@@ -513,6 +561,8 @@ jobs:
       has_cargo: ${{ needs.detect.outputs.has_cargo }}
       has_go: ${{ needs.detect.outputs.has_go }}
       has_dotnet: ${{ needs.detect.outputs.has_dotnet }}
+      has_cmake: ${{ needs.detect.outputs.has_cmake }}
+      has_conan: ${{ needs.detect.outputs.has_conan }}
       has_dockerfile: ${{ needs.detect.outputs.has_dockerfile }}
       has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}
       java_version: ${{ inputs.java_version }}
@@ -525,4 +575,7 @@ jobs:
       dockerfile_path: ${{ inputs.dockerfile_path }}
       docker_context: ${{ inputs.docker_context }}
       docker_registry: ${{ inputs.docker_registry }}
+      cpp_standard: ${{ inputs.cpp_standard }}
+      cpp_build_type: ${{ inputs.cpp_build_type }}
+      cpp_conan_remote: ${{ inputs.cpp_conan_remote }}
     secrets: inherit

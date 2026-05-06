@@ -1,0 +1,34 @@
+# ── Code Haven Demo: Node.js Express API ─────────────────────
+# Pipeline auto-detects package.json + Dockerfile.
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      node_version: '20'
+      docker_registry: 'ghcr.io'
+      maven_disabled: true
+      gradle_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      golang_disabled: true
+      cpp_disabled: true
+    secrets: inherit

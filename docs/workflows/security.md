@@ -14,6 +14,10 @@
 | `sonarqube` | SonarQube | — | Code quality + security (requires `sonar_host_url`) |
 | `checkmarx` | CxFlow | — | Enterprise SAST (requires `checkmarx_base_url`) |
 | `sqlfluff` | SQLFluff | — | SQL linting with configurable dialect |
+| `semgrep` | Semgrep | ✅ | Open-source SAST with community rules (`auto` config) |
+| `osv-scanner` | OSV Scanner | — | Google's vulnerability database — checks all ecosystems |
+| `license-check` | pip-licenses / license-checker | — | License compliance (flags copyleft licenses like GPL) |
+| `scorecard` | OSSF Scorecard | ✅ | Supply chain security assessment (OpenSSF) |
 
 ## SARIF Integration
 
@@ -40,4 +44,23 @@ secrets:
   CHECKMARX_TOKEN: ${{ secrets.CHECKMARX_TOKEN }}
   CHECKMARX_USERNAME: ${{ secrets.CHECKMARX_USERNAME }}
   CHECKMARX_PASSWORD: ${{ secrets.CHECKMARX_PASSWORD }}
+```
+
+## Disabling Individual Scanners
+
+Each scanner can be independently toggled:
+
+```yaml
+with:
+  sast_disabled: true                # Disable CodeQL
+  secret_detection_disabled: true    # Disable Gitleaks
+  dependency_scan_disabled: true     # Disable Trivy FS
+  iac_scan_disabled: true            # Disable KICS
+  sonar_disabled: true               # Disable SonarQube
+  checkmarx_disabled: true           # Disable Checkmarx
+  sqlfluff_disabled: true            # Disable SQLFluff
+  semgrep_disabled: true             # Disable Semgrep
+  osv_disabled: true                 # Disable OSV Scanner
+  license_check_disabled: true       # Disable license compliance
+  scorecard_disabled: true           # Disable OSSF Scorecard
 ```

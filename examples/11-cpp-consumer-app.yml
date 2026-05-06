@@ -1,0 +1,101 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 11 — C++ Application consuming a Conan library
+# Demonstrates a C++ application that depends on a library
+# published by another Code Haven project (cross-project deps).
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  # ── Standard CI pipeline ────────────────────────────────────
+  # The pipeline auto-detects CMakeLists.txt + conanfile.py
+  # and will automatically run `conan install` before building,
+  # which fetches the dependency from the configured remote.
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      # C/C++ configuration
+      cpp_compiler: 'gcc'
+      cpp_compiler_version: '13'
+      cpp_standard: '20'
+      cpp_build_type: 'Release'
+      cpp_conan_remote: ${{ vars.CONAN_REMOTE_URL }}
+
+      # Docker — containerize the binary
+      docker_registry: 'ghcr.io'
+
+      # Disable unrelated stacks
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      golang_disabled: true
+    secrets: inherit
+
+  # ── Deploy to Kubernetes (main only) ───────────────────────
+  deploy:
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: code-haven/code-haven/actions/cloud-login@main
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: production-cluster
+          location: us-central1
+
+      - uses: code-haven/code-haven/actions/k8s-deploy@main
+        with:
+          namespace: my-cpp-app
+          chart-path: deploy/helm
+          image-tag: ${{ github.sha }}
+          values-files: deploy/helm/values-prod.yaml
+
+# ═══════════════════════════════════════════════════════════════
+# Project files expected for this example:
+#
+# conanfile.txt (or conanfile.py):
+#   [requires]
+#   my-math-lib/1.0.0    ← published by another Code Haven repo
+#
+#   [generators]
+#   CMakeDeps
+#   CMakeToolchain
+#
+# CMakeLists.txt:
+#   find_package(my-math-lib REQUIRED)
+#   target_link_libraries(my-app my-math-lib::my-math-lib)
+#
+# The pipeline handles:
+#   1. conan install → fetches my-math-lib from remote
+#   2. cmake configure → finds my-math-lib via CMakeDeps
+#   3. cmake build → links against library
+#   4. tests run
+#   5. Docker build → packages binary
+#   6. Deploy to K8s
+# ═══════════════════════════════════════════════════════════════

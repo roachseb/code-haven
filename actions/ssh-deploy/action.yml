@@ -1,0 +1,190 @@
+# SSH Deploy — securely connect and deploy to any remote machine
+# This is the Code Haven composite action for bare-metal/VM deployments
+#
+# Usage:
+#   - uses: code-haven/code-haven/actions/ssh-deploy@main
+#     with:
+#       host: ${{ secrets.DEPLOY_HOST }}
+#       user: deploy
+#       ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
+#       deploy_script: deploy/deploy.sh
+#       artifact_path: ./dist/app.tar.gz
+
+name: SSH Deploy
+description: >
+  Securely connect to a remote machine via SSH and execute a deployment
+  script defined in the project repository. Supports artifact transfer,
+  environment file injection, and health-check verification.
+
+inputs:
+  host:
+    description: 'Target hostname or IP address'
+    required: true
+  user:
+    description: 'SSH username on the remote machine'
+    required: true
+    default: 'deploy'
+  ssh_key:
+    description: 'Private SSH key (stored as GitHub secret)'
+    required: true
+  port:
+    description: 'SSH port'
+    required: false
+    default: '22'
+  deploy_script:
+    description: 'Path to deployment script in repo (relative to repo root)'
+    required: false
+    default: 'deploy/deploy.sh'
+  deploy_path:
+    description: 'Remote deployment directory on target machine'
+    required: false
+    default: '/opt/app'
+  pre_deploy_commands:
+    description: 'Commands to run on remote BEFORE deployment (e.g., backup)'
+    required: false
+    default: ''
+  post_deploy_commands:
+    description: 'Commands to run on remote AFTER deployment (e.g., health check)'
+    required: false
+    default: ''
+  artifact_path:
+    description: 'Local artifact to transfer to remote (tar.gz, binary, etc.)'
+    required: false
+    default: ''
+  known_hosts:
+    description: 'SSH known_hosts content for host key verification (recommended)'
+    required: false
+    default: ''
+  environment_file:
+    description: 'Path to .env file to transfer to remote deploy_path'
+    required: false
+    default: ''
+  transfer_extra_files:
+    description: 'Additional files to transfer (space-separated local paths)'
+    required: false
+    default: ''
+  timeout:
+    description: 'SSH connection timeout in seconds'
+    required: false
+    default: '30'
+
+runs:
+  using: composite
+  steps:
+    # ── Setup SSH agent and keys ────────────────────────────
+    - name: Setup SSH
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+        # Write private key
+        printf '%s\n' "${{ inputs.ssh_key }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+
+        # Host key verification
+        if [ -n "${{ inputs.known_hosts }}" ]; then
+          printf '%s\n' "${{ inputs.known_hosts }}" > ~/.ssh/known_hosts
+        else
+          ssh-keyscan -p ${{ inputs.port }} -H "${{ inputs.host }}" >> ~/.ssh/known_hosts 2>/dev/null
+        fi
+        chmod 644 ~/.ssh/known_hosts
+
+        # SSH config for convenience
+        cat >> ~/.ssh/config <<EOF
+        Host deploy-target
+          HostName ${{ inputs.host }}
+          User ${{ inputs.user }}
+          Port ${{ inputs.port }}
+          IdentityFile ~/.ssh/deploy_key
+          StrictHostKeyChecking yes
+          ConnectTimeout ${{ inputs.timeout }}
+        EOF
+        chmod 600 ~/.ssh/config
+
+    # ── Pre-deploy commands (optional) ─────────────────────
+    - name: Run pre-deploy commands
+      if: inputs.pre_deploy_commands != ''
+      shell: bash
+      run: |
+        echo "🔧 Running pre-deploy commands..."
+        ssh deploy-target "${{ inputs.pre_deploy_commands }}"
+
+    # ── Ensure remote directory exists ─────────────────────
+    - name: Prepare remote directory
+      shell: bash
+      run: |
+        ssh deploy-target "mkdir -p ${{ inputs.deploy_path }}"
+
+    # ── Transfer artifact ──────────────────────────────────
+    - name: Transfer artifact
+      if: inputs.artifact_path != ''
+      shell: bash
+      run: |
+        echo "📦 Transferring artifact: ${{ inputs.artifact_path }}"
+        scp -o "ConnectTimeout=${{ inputs.timeout }}" \
+          "${{ inputs.artifact_path }}" \
+          "deploy-target:${{ inputs.deploy_path }}/"
+
+    # ── Transfer environment file ──────────────────────────
+    - name: Transfer environment file
+      if: inputs.environment_file != ''
+      shell: bash
+      run: |
+        echo "🔐 Transferring environment file..."
+        scp -o "ConnectTimeout=${{ inputs.timeout }}" \
+          "${{ inputs.environment_file }}" \
+          "deploy-target:${{ inputs.deploy_path }}/.env"
+
+    # ── Transfer extra files ───────────────────────────────
+    - name: Transfer extra files
+      if: inputs.transfer_extra_files != ''
+      shell: bash
+      run: |
+        echo "📁 Transferring extra files..."
+        for file in ${{ inputs.transfer_extra_files }}; do
+          scp -o "ConnectTimeout=${{ inputs.timeout }}" \
+            "$file" \
+            "deploy-target:${{ inputs.deploy_path }}/"
+        done
+
+    # ── Execute deployment script ──────────────────────────
+    - name: Execute deployment
+      shell: bash
+      run: |
+        echo "🚀 Executing deployment script: ${{ inputs.deploy_script }}"
+        ssh deploy-target \
+          "cd ${{ inputs.deploy_path }} && bash -s" < "${{ inputs.deploy_script }}"
+
+    # ── Post-deploy commands (optional) ────────────────────
+    - name: Run post-deploy commands
+      if: inputs.post_deploy_commands != ''
+      shell: bash
+      run: |
+        echo "✅ Running post-deploy commands..."
+        ssh deploy-target "${{ inputs.post_deploy_commands }}"
+
+    # ── Generate deployment summary ────────────────────────
+    - name: Deployment summary
+      if: always()
+      shell: bash
+      run: |
+        echo "## 🚀 SSH Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Host | \`${{ inputs.host }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| User | \`${{ inputs.user }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Port | \`${{ inputs.port }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Deploy Path | \`${{ inputs.deploy_path }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Script | \`${{ inputs.deploy_script }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Artifact | \`${{ inputs.artifact_path || 'none' }}\` |" >> $GITHUB_STEP_SUMMARY
+
+    # ── Cleanup SSH keys ───────────────────────────────────
+    - name: Cleanup SSH
+      if: always()
+      shell: bash
+      run: |
+        rm -f ~/.ssh/deploy_key
+        rm -f ~/.ssh/config
+        echo "🧹 SSH keys cleaned up"

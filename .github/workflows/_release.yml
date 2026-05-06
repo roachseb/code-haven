@@ -27,6 +27,8 @@ on:
       has_cargo: { type: string, default: 'false' }
       has_go: { type: string, default: 'false' }
       has_dotnet: { type: string, default: 'false' }
+      has_cmake: { type: string, default: 'false' }
+      has_conan: { type: string, default: 'false' }
       has_dockerfile: { type: string, default: 'false' }
       has_mkdocs: { type: string, default: 'false' }
 
@@ -41,6 +43,9 @@ on:
       dockerfile_path: { type: string, default: 'Dockerfile' }
       docker_context: { type: string, default: '.' }
       docker_registry: { type: string, default: 'ghcr.io' }
+      cpp_standard: { type: string, default: '17' }
+      cpp_build_type: { type: string, default: 'Release' }
+      cpp_conan_remote: { type: string, default: '' }
 
 jobs:
   # ┌──────────────────────────────────────────────────────────
@@ -255,6 +260,47 @@ jobs:
       - run: cargo publish --dry-run || echo "::notice::Cargo publish not configured — skipping"
 
   # ┌──────────────────────────────────────────────────────────
+  # │ C/C++ — Publish Conan package
+  # └──────────────────────────────────────────────────────────
+  cpp-release:
+    name: "⚙️ Conan Package"
+    if: inputs.has_cmake == 'true' && inputs.has_conan == 'true'
+    needs: create-release
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build
+      - name: Setup Conan & publish
+        run: |
+          pip install conan
+          conan profile detect --force
+
+          if [[ -n "${{ inputs.cpp_conan_remote }}" ]]; then
+            conan remote add project "${{ inputs.cpp_conan_remote }}" --force
+            if [[ -n "${{ secrets.CONAN_LOGIN_USERNAME }}" ]]; then
+              conan remote login project "${{ secrets.CONAN_LOGIN_USERNAME }}" -p "${{ secrets.CONAN_PASSWORD }}"
+            fi
+          fi
+
+          # Create package with version from tag
+          VERSION="${{ inputs.tag_name }}"
+          VERSION="${VERSION#v}"
+          conan create . --version="$VERSION" --build=missing \
+            -s build_type=${{ inputs.cpp_build_type }} \
+            -s compiler.cppstd=${{ inputs.cpp_standard }}
+
+          # Upload if remote configured
+          if [[ -n "${{ inputs.cpp_conan_remote }}" ]]; then
+            conan upload '*' --remote=project --confirm
+          fi
+        env:
+          CONAN_LOGIN_USERNAME: ${{ secrets.CONAN_LOGIN_USERNAME }}
+          CONAN_PASSWORD: ${{ secrets.CONAN_PASSWORD }}
+
+  # ┌──────────────────────────────────────────────────────────
   # │ .NET — Publish NuGet
   # └──────────────────────────────────────────────────────────
   dotnet-release:
@@ -281,7 +327,7 @@ jobs:
   # └──────────────────────────────────────────────────────────
   release-summary:
     name: "📋 Release Summary"
-    needs: [create-release, docker-release, java-release, node-release, python-release, go-release, rust-release, dotnet-release]
+    needs: [create-release, docker-release, java-release, node-release, python-release, go-release, rust-release, cpp-release, dotnet-release]
     if: always()
     runs-on: ${{ inputs.runner }}
     steps:
@@ -299,5 +345,6 @@ jobs:
             echo "| Python Package | ${{ needs.python-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| Go Binaries    | ${{ needs.go-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| Rust Crate     | ${{ needs.rust-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo "| C++ Conan      | ${{ needs.cpp-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| NuGet Package  | ${{ needs.dotnet-release.result == 'success' && '✅' || '⬜ skipped' }} |"
           } >> "$GITHUB_STEP_SUMMARY"

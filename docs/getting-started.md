@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   ci:
-    uses: code-haven/.github/workflows/devsecops.yml@main
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
     secrets: inherit
 ```
 
@@ -67,7 +67,7 @@ permissions:
 
 jobs:
   ci:
-    uses: code-haven/.github/workflows/devsecops.yml@main
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
     with:
       java_version: '17'
       python_version: '3.12'

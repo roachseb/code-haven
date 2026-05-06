@@ -1,0 +1,353 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — C/C++ Build Pipeline
+# Internal reusable workflow — called from devsecops.yml
+#
+# Toolchain: CMake + Conan 2.x
+# Static Analysis: clang-tidy, cppcheck
+# Formatting: clang-format
+# Testing: CTest (GoogleTest / Catch2)
+# Packaging: Conan create + upload
+# ═══════════════════════════════════════════════════════════════
+name: "⚙️ C/C++"
+
+on:
+  workflow_call:
+    inputs:
+      runner: { type: string, default: 'ubuntu-latest' }
+      cpp_disabled: { type: boolean, default: false }
+      cpp_standard: { type: string, default: '17' }
+      cpp_build_type: { type: string, default: 'Release' }
+      cpp_compiler: { type: string, default: 'gcc' }
+      cpp_compiler_version: { type: string, default: '' }
+      cpp_conan_remote: { type: string, default: '' }
+      cpp_coverage_enabled: { type: boolean, default: false }
+      has_conan: { type: string, default: 'false' }
+    secrets:
+      CONAN_LOGIN_USERNAME: { required: false }
+      CONAN_PASSWORD: { required: false }
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Build & Test — CMake configure + build + CTest
+  # ──────────────────────────────────────────────────────────
+  cpp-build:
+    name: "⚙️ C++ Build & Test"
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build ccache gcovr lcov
+
+      - name: Install compiler
+        run: |
+          if [[ "${{ inputs.cpp_compiler }}" == "clang" ]]; then
+            VERSION="${{ inputs.cpp_compiler_version }}"
+            [[ -z "$VERSION" ]] && VERSION="16"
+            sudo apt-get install -y --no-install-recommends \
+              clang-${VERSION} libc++-${VERSION}-dev libc++abi-${VERSION}-dev
+            echo "CC=clang-${VERSION}" >> "$GITHUB_ENV"
+            echo "CXX=clang++-${VERSION}" >> "$GITHUB_ENV"
+          else
+            VERSION="${{ inputs.cpp_compiler_version }}"
+            [[ -z "$VERSION" ]] && VERSION="13"
+            sudo apt-get install -y --no-install-recommends \
+              g++-${VERSION}
+            echo "CC=gcc-${VERSION}" >> "$GITHUB_ENV"
+            echo "CXX=g++-${VERSION}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Conan
+        if: inputs.has_conan == 'true'
+        run: |
+          pip install conan
+          conan profile detect --force
+
+          # Configure compiler settings in default profile
+          PROFILE_PATH="$(conan profile path default)"
+          sed -i "s/compiler.cppstd=.*/compiler.cppstd=${{ inputs.cpp_standard }}/" "$PROFILE_PATH" || true
+
+          # Add remote if configured
+          if [[ -n "${{ inputs.cpp_conan_remote }}" ]]; then
+            conan remote add project "${{ inputs.cpp_conan_remote }}" --force
+            if [[ -n "${{ secrets.CONAN_LOGIN_USERNAME }}" ]]; then
+              conan remote login project "${{ secrets.CONAN_LOGIN_USERNAME }}" -p "${{ secrets.CONAN_PASSWORD }}"
+            fi
+          fi
+
+      - name: Install Conan dependencies
+        if: inputs.has_conan == 'true'
+        run: |
+          conan install . --output-folder=build --build=missing \
+            -s build_type=${{ inputs.cpp_build_type }} \
+            -s compiler.cppstd=${{ inputs.cpp_standard }}
+
+      - name: CMake Configure
+        run: |
+          CMAKE_ARGS="-B build -G Ninja"
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cpp_build_type }}"
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_CXX_STANDARD=${{ inputs.cpp_standard }}"
+
+          if [[ "${{ inputs.cpp_coverage_enabled }}" == "true" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage"
+          fi
+
+          # Use Conan toolchain if available
+          if [[ -f build/conan_toolchain.cmake ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake"
+          fi
+
+          cmake $CMAKE_ARGS
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test (CTest)
+        run: |
+          cd build
+          ctest --output-on-failure --output-junit test-results.xml || true
+
+      - name: Coverage Report
+        if: inputs.cpp_coverage_enabled == true
+        run: |
+          cd build
+          gcovr --root .. --xml coverage.xml --html coverage.html \
+            --exclude '../tests/' --exclude '../build/' \
+            --print-summary
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-test-results
+          path: |
+            build/test-results.xml
+            build/coverage.xml
+            build/coverage.html
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Docker inputs (C++)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-input-cpp
+          path: |
+            build/bin/*
+            build/lib/*
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## ⚙️ C++ Build & Test Results"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---------|-------|"
+            echo "| Compiler | ${{ inputs.cpp_compiler }} ${{ inputs.cpp_compiler_version }} |"
+            echo "| Standard | C++${{ inputs.cpp_standard }} |"
+            echo "| Build Type | ${{ inputs.cpp_build_type }} |"
+            echo "| Conan | ${{ inputs.has_conan }} |"
+            echo "| Coverage | ${{ inputs.cpp_coverage_enabled }} |"
+            echo ""
+            if [[ -f build/test-results.xml ]]; then
+              TESTS=$(grep -c '<testcase' build/test-results.xml 2>/dev/null || echo "0")
+              FAILURES=$(grep -c '<failure' build/test-results.xml 2>/dev/null || echo "0")
+              echo "### Test Results"
+              echo "- Total: **${TESTS}** | Failures: **${FAILURES}**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Static Analysis — clang-tidy + cppcheck (soft-fail)
+  # ──────────────────────────────────────────────────────────
+  cpp-lint:
+    name: "⚙️ C++ Static Analysis"
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install analysis tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build clang-tidy cppcheck
+
+      - name: Setup Conan (for includes)
+        if: inputs.has_conan == 'true'
+        run: |
+          pip install conan
+          conan profile detect --force
+          conan install . --output-folder=build --build=missing \
+            -s build_type=${{ inputs.cpp_build_type }} \
+            -s compiler.cppstd=${{ inputs.cpp_standard }}
+
+      - name: CMake Configure (for compile_commands.json)
+        run: |
+          CMAKE_ARGS="-B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+          if [[ -f build/conan_toolchain.cmake ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake"
+          fi
+          cmake $CMAKE_ARGS
+
+      - name: Run clang-tidy
+        run: |
+          if [[ -f .clang-tidy ]]; then
+            find src include -name '*.cpp' -o -name '*.cxx' -o -name '*.cc' -o -name '*.h' -o -name '*.hpp' 2>/dev/null | \
+              xargs -r clang-tidy -p build --quiet 2>&1 | tee clang-tidy-report.txt || true
+          else
+            echo "No .clang-tidy config found, skipping clang-tidy" | tee clang-tidy-report.txt
+          fi
+
+      - name: Run cppcheck
+        run: |
+          cppcheck --enable=warning,style,performance,portability \
+            --suppress=missingInclude \
+            --inline-suppr \
+            --xml --output-file=cppcheck-report.xml \
+            src/ include/ 2>/dev/null || \
+          cppcheck --enable=warning,style,performance,portability \
+            --suppress=missingInclude \
+            --inline-suppr \
+            --xml --output-file=cppcheck-report.xml \
+            . 2>/dev/null || true
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-lint-reports
+          path: |
+            clang-tidy-report.txt
+            cppcheck-report.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## ⚙️ C++ Static Analysis"
+            echo ""
+            echo "### clang-tidy"
+            if [[ -f clang-tidy-report.txt ]]; then
+              WARNINGS=$(grep -c "warning:" clang-tidy-report.txt 2>/dev/null || echo "0")
+              ERRORS=$(grep -c "error:" clang-tidy-report.txt 2>/dev/null || echo "0")
+              echo "- Warnings: **${WARNINGS}** | Errors: **${ERRORS}**"
+            else
+              echo "- ⏭️ Skipped"
+            fi
+            echo ""
+            echo "### cppcheck"
+            if [[ -f cppcheck-report.xml ]]; then
+              ISSUES=$(grep -c '<error ' cppcheck-report.xml 2>/dev/null || echo "0")
+              echo "- Issues found: **${ISSUES}**"
+            else
+              echo "- ⏭️ Skipped"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Format Check — clang-format (soft-fail)
+  # ──────────────────────────────────────────────────────────
+  cpp-format:
+    name: "⚙️ C++ Format Check"
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-format
+
+      - name: Check formatting
+        run: |
+          SOURCES=$(find . -path ./build -prune -o \
+            \( -name '*.cpp' -o -name '*.cxx' -o -name '*.cc' \
+               -o -name '*.h' -o -name '*.hpp' -o -name '*.hxx' \) \
+            -print 2>/dev/null)
+
+          if [[ -z "$SOURCES" ]]; then
+            echo "No C++ source files found"
+            exit 0
+          fi
+
+          UNFORMATTED=""
+          while IFS= read -r file; do
+            if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
+              UNFORMATTED="$UNFORMATTED $file"
+            fi
+          done <<< "$SOURCES"
+
+          if [[ -n "$UNFORMATTED" ]]; then
+            echo "::warning::The following files need formatting:$UNFORMATTED"
+            echo "## ⚙️ Format Check — ❌ Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Files needing format:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$UNFORMATTED" | tr ' ' '\n' | grep -v '^$' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "## ⚙️ Format Check — ✅ Passed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ──────────────────────────────────────────────────────────
+  # Conan Package — Create & optionally upload (main/tag only)
+  # ──────────────────────────────────────────────────────────
+  cpp-package:
+    name: "⚙️ C++ Conan Package"
+    needs: cpp-build
+    if: inputs.has_conan == 'true'
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build
+
+      - name: Setup Conan
+        run: |
+          pip install conan
+          conan profile detect --force
+
+          if [[ -n "${{ inputs.cpp_conan_remote }}" ]]; then
+            conan remote add project "${{ inputs.cpp_conan_remote }}" --force
+            if [[ -n "${{ secrets.CONAN_LOGIN_USERNAME }}" ]]; then
+              conan remote login project "${{ secrets.CONAN_LOGIN_USERNAME }}" -p "${{ secrets.CONAN_PASSWORD }}"
+            fi
+          fi
+
+      - name: Conan Create
+        run: |
+          conan create . --build=missing \
+            -s build_type=${{ inputs.cpp_build_type }} \
+            -s compiler.cppstd=${{ inputs.cpp_standard }}
+
+      - name: Conan Upload
+        if: |
+          inputs.cpp_conan_remote != '' &&
+          (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
+           startsWith(github.ref, 'refs/tags/'))
+        run: |
+          conan upload '*' --remote=project --confirm
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## ⚙️ Conan Package"
+            echo ""
+            echo "| Key | Value |"
+            echo "|-----|-------|"
+            echo "| Remote | \`${{ inputs.cpp_conan_remote || 'local only' }}\` |"
+            echo "| Upload | $(if [[ '${{ github.ref }}' == refs/heads/${{ github.event.repository.default_branch }} ]] || [[ '${{ github.ref }}' == refs/tags/* ]]; then echo '✅ Yes'; else echo '⏭️ Skipped (not main/tag)'; fi) |"
+          } >> "$GITHUB_STEP_SUMMARY"

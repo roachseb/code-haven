@@ -1,0 +1,14 @@
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-use-trailing-return-type
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(src|include)/.*'

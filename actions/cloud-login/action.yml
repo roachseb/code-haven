@@ -58,6 +58,10 @@ inputs:
   gcp_credentials_json:
     description: 'GCP service account key JSON (fallback)'
     required: false
+  gcp_artifact_registry_region:
+    description: 'GCP Artifact Registry region (e.g., us-central1) for Docker auth'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -99,4 +103,9 @@ runs:
     - name: GCP Docker Auth
       if: inputs.provider == 'gcp'
       shell: bash
-      run: gcloud auth configure-docker
+      run: |
+        if [ -n "${{ inputs.gcp_artifact_registry_region }}" ]; then
+          gcloud auth configure-docker "${{ inputs.gcp_artifact_registry_region }}-docker.pkg.dev" --quiet
+        else
+          gcloud auth configure-docker --quiet
+        fi

@@ -1,0 +1,126 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 10 — GCP Artifact Registry + Cloud Run Deployment
+# Demonstrates pushing Docker images to GCP Artifact Registry
+# and deploying to Cloud Run, with dual-registry support.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  # ── Standard CI pipeline ────────────────────────────────────
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      # Python app (example: FastAPI service)
+      python_version: '3.12'
+
+      # Docker — push to GHCR (GCP push handled in separate job below)
+      docker_registry: 'ghcr.io'
+
+      # Disable unrelated stacks
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      golang_disabled: true
+    secrets: inherit
+
+  # ── Push to GCP Artifact Registry ──────────────────────────
+  push-gcp:
+    needs: ci
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feature/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Authenticate to GCP via Workload Identity Federation
+      - uses: code-haven/code-haven/actions/cloud-login@main
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      # Configure Docker for GCP Artifact Registry
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      # Pull from GHCR → push to GCP AR
+      - name: Push to GCP Artifact Registry
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          GHCR_IMAGE="ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
+          GAR_IMAGE="us-central1-docker.pkg.dev/my-gcp-project/services/${{ github.event.repository.name }}:${IMAGE_TAG}"
+
+          docker pull "${GHCR_IMAGE}"
+          docker tag "${GHCR_IMAGE}" "${GAR_IMAGE}"
+          docker push "${GAR_IMAGE}"
+
+          # Also tag as latest on main
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            GAR_LATEST="us-central1-docker.pkg.dev/my-gcp-project/services/${{ github.event.repository.name }}:latest"
+            docker tag "${GHCR_IMAGE}" "${GAR_LATEST}"
+            docker push "${GAR_LATEST}"
+          fi
+
+  # ── Deploy to Cloud Run (main only) ────────────────────────
+  deploy-cloud-run:
+    needs: push-gcp
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: code-haven/code-haven/actions/cloud-login@main
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: my-python-service
+          image: us-central1-docker.pkg.dev/my-gcp-project/services/${{ github.event.repository.name }}:${{ github.sha }}
+          region: us-central1
+          flags: '--allow-unauthenticated --memory=512Mi --cpu=1'
+
+  # ── Deploy to GKE (alternative — uncomment to use) ─────────
+  # deploy-gke:
+  #   needs: push-gcp
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   environment: production-k8s
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: code-haven/code-haven/actions/cloud-login@main
+  #       with:
+  #         provider: gcp
+  #         gcp_workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+  #         gcp_service_account: ${{ secrets.GCP_SA_EMAIL }}
+  #
+  #     - uses: google-github-actions/get-gke-credentials@v2
+  #       with:
+  #         cluster_name: my-gke-cluster
+  #         location: us-central1
+  #
+  #     - uses: code-haven/code-haven/actions/k8s-deploy@main
+  #       with:
+  #         namespace: my-app
+  #         chart-path: deploy/helm
+  #         image-tag: ${{ github.sha }}
+  #         values-files: deploy/helm/values-prod.yaml

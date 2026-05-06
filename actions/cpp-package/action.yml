@@ -1,0 +1,172 @@
+# C++ Package — Conan 2.x create, build, and upload
+# This composite action handles packaging C/C++ libraries via Conan
+#
+# Usage:
+#   - uses: code-haven/code-haven/actions/cpp-package@main
+#     with:
+#       conan_remote_url: https://your-conan-server.example.com
+#       conan_remote_name: company-packages
+#       conan_login_username: ${{ secrets.CONAN_USER }}
+#       conan_login_password: ${{ secrets.CONAN_PASSWORD }}
+
+name: C++ Package
+description: >
+  Build, package, and upload C/C++ libraries using Conan 2.x.
+  Supports custom remotes, profile-based builds, and binary caching.
+
+inputs:
+  conan_version:
+    description: 'Conan version to install'
+    required: false
+    default: '2'
+  conan_remote_url:
+    description: 'Conan remote URL for package upload'
+    required: false
+    default: ''
+  conan_remote_name:
+    description: 'Name for the Conan remote'
+    required: false
+    default: 'code-haven'
+  conan_login_username:
+    description: 'Conan remote login username'
+    required: false
+    default: ''
+  conan_login_password:
+    description: 'Conan remote login password/token'
+    required: false
+    default: ''
+  conan_channel:
+    description: 'Conan channel (e.g., stable, testing, feature-branch)'
+    required: false
+    default: ''
+  conan_profile:
+    description: 'Conan profile to use (default: auto-detected)'
+    required: false
+    default: 'default'
+  build_policy:
+    description: 'Conan build policy: missing, never, always, cascade'
+    required: false
+    default: 'missing'
+  upload_package:
+    description: 'Whether to upload the package to remote (true/false)'
+    required: false
+    default: 'true'
+  cmake_build_type:
+    description: 'CMake build type: Release, Debug, RelWithDebInfo'
+    required: false
+    default: 'Release'
+  compiler:
+    description: 'Compiler to use: gcc, clang'
+    required: false
+    default: 'gcc'
+  compiler_version:
+    description: 'Compiler version (e.g., 13 for GCC, 17 for Clang)'
+    required: false
+    default: '13'
+  cpp_standard:
+    description: 'C++ standard: 14, 17, 20, 23'
+    required: false
+    default: '20'
+
+runs:
+  using: composite
+  steps:
+    # ── Install Conan ──────────────────────────────────────
+    - name: Install Conan
+      shell: bash
+      run: |
+        pip install "conan>=${{ inputs.conan_version }},<3" --quiet
+        conan --version
+
+    # ── Configure Conan profile ────────────────────────────
+    - name: Setup Conan profile
+      shell: bash
+      run: |
+        conan profile detect --force
+
+        # Override settings if specified
+        if [ "${{ inputs.compiler }}" = "clang" ]; then
+          conan profile path default | xargs -I{} sed -i \
+            's/compiler=gcc/compiler=clang/' {}
+        fi
+
+        echo "📋 Active Conan profile:"
+        conan profile show
+
+    # ── Add remote registry ────────────────────────────────
+    - name: Configure Conan remote
+      if: inputs.conan_remote_url != ''
+      shell: bash
+      run: |
+        conan remote add "${{ inputs.conan_remote_name }}" \
+          "${{ inputs.conan_remote_url }}" --force
+
+        # Authenticate if credentials provided
+        if [ -n "${{ inputs.conan_login_username }}" ]; then
+          conan remote login "${{ inputs.conan_remote_name }}" \
+            "${{ inputs.conan_login_username }}" \
+            -p "${{ inputs.conan_login_password }}"
+        fi
+
+    # ── Install dependencies ───────────────────────────────
+    - name: Install dependencies
+      shell: bash
+      run: |
+        conan install . \
+          --output-folder=build \
+          --build=${{ inputs.build_policy }} \
+          -s build_type=${{ inputs.cmake_build_type }} \
+          -s compiler.cppstd=${{ inputs.cpp_standard }}
+
+    # ── Build with CMake via Conan ─────────────────────────
+    - name: Build package
+      shell: bash
+      run: |
+        conan build . \
+          --output-folder=build \
+          -s build_type=${{ inputs.cmake_build_type }}
+
+    # ── Create Conan package ───────────────────────────────
+    - name: Create Conan package
+      shell: bash
+      run: |
+        CHANNEL_ARGS=""
+        if [ -n "${{ inputs.conan_channel }}" ]; then
+          CHANNEL_ARGS="--channel=${{ inputs.conan_channel }}"
+        fi
+
+        conan create . \
+          --build=${{ inputs.build_policy }} \
+          -s build_type=${{ inputs.cmake_build_type }} \
+          -s compiler.cppstd=${{ inputs.cpp_standard }} \
+          $CHANNEL_ARGS
+
+    # ── Upload to remote ───────────────────────────────────
+    - name: Upload package
+      if: inputs.upload_package == 'true' && inputs.conan_remote_url != ''
+      shell: bash
+      run: |
+        echo "📤 Uploading package to ${{ inputs.conan_remote_name }}..."
+        conan upload "*" \
+          --remote="${{ inputs.conan_remote_name }}" \
+          --confirm
+
+    # ── Summary ────────────────────────────────────────────
+    - name: Package summary
+      if: always()
+      shell: bash
+      run: |
+        echo "## 📦 C++ Package Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Compiler | \`${{ inputs.compiler }}-${{ inputs.compiler_version }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| C++ Standard | \`C++${{ inputs.cpp_standard }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Type | \`${{ inputs.cmake_build_type }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Conan Remote | \`${{ inputs.conan_remote_name }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Upload | \`${{ inputs.upload_package }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Installed Packages" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        conan list "*" 2>/dev/null || echo "No packages listed"
+        echo '```' >> $GITHUB_STEP_SUMMARY

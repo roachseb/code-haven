@@ -43,10 +43,15 @@ All toggles follow the pattern `<stack>_disabled` — set to `true` to skip:
 | `sonar_disabled` | SonarQube analysis |
 | `checkmarx_disabled` | Checkmarx SAST |
 | `sqlfluff_disabled` | SQLFluff SQL linting |
+| `semgrep_disabled` | Semgrep open-source SAST |
+| `osv_disabled` | Google OSV vulnerability scanner |
+| `license_check_disabled` | License compliance check |
+| `scorecard_disabled` | OSSF Scorecard supply chain security |
 | `links_check_disabled` | Lychee link checker |
 | `code_quality_disabled` | CodeClimate quality |
 | `code_metrics_disabled` | SCC code metrics |
 | `hadolint_disabled` | Dockerfile linting |
+| `actionlint_disabled` | GitHub Actions workflow linting |
 
 ## Language-Specific Options
 
@@ -126,7 +131,64 @@ All toggles follow the pattern `<stack>_disabled` — set to `true` to skip:
 | `AWS_ROLE_ARN` | No | AWS OIDC authentication (via cloud-login action) |
 | `CC_TEST_REPORTER_ID` | No | CodeClimate quality reporting |
 | `CYPRESS_RECORD_KEY` | No | Cypress Dashboard recording |
+| `DEPLOY_HOST` | No | SSH deployment target hostname |
+| `DEPLOY_SSH_KEY` | No | SSH private key for deployment |
+| `KNOWN_HOSTS` | No | SSH known_hosts for host verification |
+| `CONAN_REMOTE_URL` | No | Conan package registry URL (C++) |
+| `CONAN_LOGIN_USERNAME` | No | Conan remote authentication |
+| `CONAN_LOGIN_PASSWORD` | No | Conan remote authentication |
+| `GCP_WIF_PROVIDER` | No | GCP Workload Identity Federation provider |
+| `GCP_SA_EMAIL` | No | GCP service account email |
 
 !!! note "GITHUB_TOKEN"
     The `GITHUB_TOKEN` is automatically available and used for GHCR login,
     NuGet publishing, Helm OCI push, and Gitleaks scanning. No configuration needed.
+
+## C/C++ Options
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `cpp_compiler` | `gcc` | Compiler: `gcc` or `clang` |
+| `cpp_compiler_version` | `13` | Compiler version (GCC 13, Clang 17, etc.) |
+| `cpp_standard` | `20` | C++ standard: `14`, `17`, `20`, `23` |
+| `cpp_build_type` | `Release` | CMake build type: Release, Debug, RelWithDebInfo |
+| `cpp_build_system` | `cmake` | Build system: `cmake`, `meson` |
+| `cpp_package_manager` | `conan` | Package manager: `conan`, `vcpkg`, `none` |
+| `cpp_conan_remote` | *(empty)* | Custom Conan remote URL |
+| `cpp_test_framework` | `ctest` | Test framework: `ctest`, `gtest`, `catch2` |
+| `cpp_coverage_enabled` | `true` | Generate gcov/lcov coverage reports |
+| `cpp_cross_compile` | *(empty)* | Target triple for cross-compilation |
+| `cpp_disabled` | `false` | Disable entire C/C++ pipeline |
+
+## GCP / Registry Options
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `package_registry` | `github` | Target registry: `github`, `gcp`, `both` |
+| `gcp_project_id` | *(empty)* | GCP project ID (for Artifact Registry) |
+| `gcp_region` | `us-central1` | GCP Artifact Registry region |
+| `gcp_docker_repo` | `containers` | GCP AR Docker repository name |
+| `gcp_maven_repo` | `java-libs` | GCP AR Maven repository name |
+| `gcp_npm_repo` | `npm-libs` | GCP AR npm repository name |
+| `gcp_python_repo` | `python-libs` | GCP AR Python repository name |
+| `gcp_conan_repo` | `cpp-libs` | GCP AR generic/Conan repository name |
+
+## Branch Packaging & Deployment
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `package_on_feature` | `false` | Enable packaging on feature branches |
+| `package_branches` | `main` | Glob patterns for branches that produce packages |
+| `deploy_enabled` | `false` | Master switch for deployment |
+| `deploy_branches` | `main` | Branches that trigger deployment |
+| `deploy_type` | `none` | Deployment method: `k8s`, `cloud-run`, `ssh`, `none` |
+
+## SSH Deployment
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `ssh_host` | *(empty)* | Target hostname for SSH deployment |
+| `ssh_user` | `deploy` | SSH username |
+| `ssh_port` | `22` | SSH port |
+| `ssh_deploy_script` | `deploy/deploy.sh` | Path to deployment script in repo |
+| `ssh_deploy_path` | `/opt/app` | Remote deployment directory |

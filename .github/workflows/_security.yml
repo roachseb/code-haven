@@ -20,6 +20,10 @@ on:
       sonar_project_key: { type: string, default: '' }
       checkmarx_base_url: { type: string, default: '' }
       sqlfluff_dialect: { type: string, default: 'ansi' }
+      semgrep_disabled: { type: boolean, default: false }
+      osv_disabled: { type: boolean, default: false }
+      license_check_disabled: { type: boolean, default: false }
+      scorecard_disabled: { type: boolean, default: false }
     secrets:
       SONAR_TOKEN: { required: false }
       CHECKMARX_TOKEN: { required: false }
@@ -188,3 +192,146 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: sqlfluff-report, path: sqlfluff-report.json, retention-days: 7 }
+
+  # ── Semgrep (SAST — open-source rules) ──────────────────
+  semgrep:
+    name: "🔎 Semgrep SAST"
+    if: ${{ !inputs.semgrep_disabled }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        run: |
+          semgrep scan --config auto --sarif --output semgrep.sarif . || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: semgrep.sarif, category: 'semgrep' }
+        continue-on-error: true
+      - name: Summary
+        if: always()
+        run: |
+          FINDINGS=$(grep -c '"level"' semgrep.sarif 2>/dev/null || echo "0")
+          {
+            echo "## 🔎 Semgrep SAST"
+            echo "- Findings: **${FINDINGS}**"
+            echo "- Config: \`auto\` (community + p/default)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── OSV Scanner (Google vulnerability DB) ───────────────
+  osv-scanner:
+    name: "🛡 OSV Scanner"
+    if: ${{ !inputs.osv_disabled }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google/osv-scanner-action/osv-scanner-action@v2
+        with:
+          scan-args: |-
+            --recursive
+            --output=osv-results.json
+            --format=json
+            ./
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: osv-scanner-report, path: osv-results.json, if-no-files-found: ignore, retention-days: 7 }
+      - name: Summary
+        if: always()
+        run: |
+          if [[ -f osv-results.json ]]; then
+            VULNS=$(grep -c '"id"' osv-results.json 2>/dev/null || echo "0")
+            echo "## 🛡 OSV Scanner — $VULNS known vulnerabilities found" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## 🛡 OSV Scanner — ✅ No vulnerabilities detected" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ── License Compliance Check ────────────────────────────
+  license-check:
+    name: "📜 License Compliance"
+    if: ${{ !inputs.license_check_disabled }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check licenses
+        run: |
+          # Install license scanning tool
+          pip install pip-licenses 2>/dev/null || true
+
+          mkdir -p license-report
+          REPORT="license-report/licenses.md"
+
+          {
+            echo "# License Compliance Report"
+            echo ""
+            echo "Generated: $(date -u)"
+            echo ""
+          } > "$REPORT"
+
+          # Python dependencies
+          if [[ -f requirements.txt ]] || [[ -f pyproject.toml ]]; then
+            pip install -r requirements.txt 2>/dev/null || pip install . 2>/dev/null || true
+            echo "## Python Dependencies" >> "$REPORT"
+            pip-licenses --format=markdown >> "$REPORT" 2>/dev/null || true
+            echo "" >> "$REPORT"
+          fi
+
+          # Node dependencies
+          if [[ -f package.json ]]; then
+            npx license-checker --summary --production 2>/dev/null | tee -a "$REPORT" || true
+          fi
+
+          # Check for copyleft licenses
+          COPYLEFT=$(grep -iE "GPL|AGPL|LGPL|SSPL|EUPL" "$REPORT" 2>/dev/null || true)
+          if [[ -n "$COPYLEFT" ]]; then
+            echo "::warning::Copyleft licenses detected — review required"
+            echo "" >> "$REPORT"
+            echo "## ⚠️ Copyleft Licenses Detected" >> "$REPORT"
+            echo "$COPYLEFT" >> "$REPORT"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: license-report, path: license-report, if-no-files-found: ignore, retention-days: 30 }
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 📜 License Compliance"
+            if [[ -f license-report/licenses.md ]]; then
+              TOTAL=$(grep -c '|' license-report/licenses.md 2>/dev/null || echo "0")
+              echo "- Dependencies scanned: ~$TOTAL"
+              if grep -qiE "GPL|AGPL|LGPL" license-report/licenses.md 2>/dev/null; then
+                echo "- ⚠️ **Copyleft licenses detected** — manual review required"
+              else
+                echo "- ✅ No copyleft licenses found"
+              fi
+            else
+              echo "- ⏭️ No dependency manifests detected"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── OSSF Scorecard (Supply Chain Security) ───────────────
+  scorecard:
+    name: "📊 OSSF Scorecard"
+    if: ${{ !inputs.scorecard_disabled && github.event_name != 'pull_request' }}
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: ossf/scorecard-action@v2.4.0
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          publish_results: false
+        continue-on-error: true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: scorecard-results.sarif, category: 'scorecard' }
+        continue-on-error: true

@@ -1,0 +1,38 @@
+# ── Code Haven Demo: C++ Library ──────────────────────────────
+# This project uses Code Haven for CI/CD.
+# Pipeline auto-detects CMakeLists.txt + conanfile.py
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      cpp_compiler: 'gcc'
+      cpp_compiler_version: '13'
+      cpp_standard: '20'
+      cpp_coverage_enabled: true
+      # Disable everything else
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      golang_disabled: true
+    secrets: inherit

@@ -10,10 +10,12 @@ on:
       runner: { type: string, default: 'ubuntu-latest' }
       has_mkdocs: { type: string, default: 'false' }
       has_dockerfile: { type: string, default: 'false' }
+      has_github_workflows: { type: string, default: 'false' }
       code_quality_disabled: { type: boolean, default: false }
       code_metrics_disabled: { type: boolean, default: false }
       links_check_disabled: { type: boolean, default: false }
       hadolint_disabled: { type: boolean, default: false }
+      actionlint_disabled: { type: boolean, default: false }
       dockerfile_path: { type: string, default: 'Dockerfile' }
     secrets:
       CC_TEST_REPORTER_ID: { required: false }
@@ -84,3 +86,26 @@ jobs:
         if: always()
         with: { sarif_file: hadolint.sarif }
         continue-on-error: true
+
+  actionlint:
+    name: "🔧 Actionlint"
+    if: inputs.has_github_workflows == 'true' && !inputs.actionlint_disabled
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1
+        with:
+          flags: '-format "{{json .}}"'
+        continue-on-error: true
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🔧 Actionlint — GitHub Actions Workflow Lint" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f actionlint-output.json ]] && [[ -s actionlint-output.json ]]; then
+            ISSUES=$(wc -l < actionlint-output.json)
+            echo "- Issues found: **${ISSUES}**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ✅ No issues found" >> "$GITHUB_STEP_SUMMARY"
+          fi

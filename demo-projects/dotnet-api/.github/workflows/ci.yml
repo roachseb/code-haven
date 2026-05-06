@@ -1,0 +1,33 @@
+# ── Code Haven Demo: .NET API ────────────────────────────────
+# Pipeline auto-detects *.sln / *.csproj.
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      dotnet_version: '8.0.x'
+      maven_disabled: true
+      gradle_disabled: true
+      npm_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      php_disabled: true
+      golang_disabled: true
+      cpp_disabled: true
+    secrets: inherit

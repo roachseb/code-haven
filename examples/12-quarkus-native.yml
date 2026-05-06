@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 12 — Quarkus (Red Hat) with Native Build
+# Demonstrates a Java Quarkus microservice with both JVM and
+# GraalVM native image builds, health checks, and Docker.
+#
+# Quarkus is auto-detected via pom.xml (standard Maven).
+# The native build runs as a separate job after CI passes.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  # ── Standard CI pipeline ────────────────────────────────────
+  # Code Haven auto-detects pom.xml and runs Maven build/test.
+  # Quarkus projects work out of the box with the Java pipeline.
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      # Java 21 for Quarkus 3.x
+      java_version: '21'
+      java_distribution: 'temurin'
+      maven_build_cmd: 'install'
+      java_doc_enabled: true
+
+      # Docker image (JVM-based by default)
+      docker_registry: 'ghcr.io'
+
+      # Disable unrelated stacks
+      npm_disabled: true
+      python_disabled: true
+      rust_disabled: true
+      dotnet_disabled: true
+      php_disabled: true
+      golang_disabled: true
+      cpp_disabled: true
+    secrets: inherit
+
+  # ── Native Build (GraalVM) ─────────────────────────────────
+  # Quarkus supports compiling to native executables via GraalVM.
+  # This produces a ~50MB binary with <50ms startup time.
+  # Only runs on main branch or release tags.
+  native:
+    needs: ci
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Quarkus Native Build
+        run: |
+          mvn package -Pnative -DskipTests --batch-mode
+
+      - name: Verify native binary
+        run: |
+          ./target/*-runner -Dquarkus.http.port=8081 &
+          sleep 3
+          curl -sf http://localhost:8081/q/health/ready
+          kill %1
+
+      - name: Upload native binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-native
+          path: target/*-runner
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          SIZE=$(du -sh target/*-runner | cut -f1)
+          {
+            echo "## 🔥 Quarkus Native Build"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Binary size | **$SIZE** |"
+            echo "| Java version | 21 (GraalVM) |"
+            echo "| Quarkus version | $(mvn help:evaluate -Dexpression=quarkus.platform.version -q -DforceStdout) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Native Docker Image ────────────────────────────────────
+  # Build a minimal container with the native binary.
+  # Uses a distroless base for security (no shell, no package manager).
+  native-docker:
+    needs: native
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: BUILD_TYPE=native
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}-native
+            ghcr.io/${{ github.repository }}:native-latest

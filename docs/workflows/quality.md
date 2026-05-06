@@ -8,5 +8,7 @@
 | Job | Tool | Description |
 |-----|------|-------------|
 | `code-quality` | CodeClimate | Automated code quality checks (requires `CC_TEST_REPORTER_ID`) |
-| `code-metrics` | SCC | Lines of code, complexity, language breakdown (default branch only) |
+| `code-metrics` | SCC | Lines of code, complexity, language breakdown |
 | `links-check` | Lychee | Dead link detection in Markdown files |
+| `hadolint` | Hadolint | Dockerfile best practices linting (SARIF upload) |
+| `actionlint` | Actionlint | GitHub Actions workflow file validation |
