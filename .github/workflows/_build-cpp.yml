@@ -100,7 +100,8 @@ jobs:
             CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake"
           fi
 
-          # shellcheck disable=SC2086 — intentional word splitting of cmake args
+          # Intentional word splitting of cmake args
+          # shellcheck disable=SC2086
           cmake $CMAKE_ARGS
 
       - name: Build
@@ -200,7 +201,7 @@ jobs:
       - name: Run clang-tidy
         run: |
           if [[ -f .clang-tidy ]]; then
-            find src include -name '*.cpp' -o -name '*.cxx' -o -name '*.cc' -o -name '*.h' -o -name '*.hpp' -print0 2>/dev/null | \
+            find src include \( -name '*.cpp' -o -name '*.cxx' -o -name '*.cc' -o -name '*.h' -o -name '*.hpp' \) -print0 2>/dev/null | \
               xargs -0 -r clang-tidy -p build --quiet 2>&1 | tee clang-tidy-report.txt || true
           else
             echo "No .clang-tidy config found, skipping clang-tidy" | tee clang-tidy-report.txt
@@ -353,5 +354,6 @@ jobs:
             echo "| Key | Value |"
             echo "|-----|-------|"
             echo "| Remote | \`${{ inputs.cpp_conan_remote || 'local only' }}\` |"
+            # shellcheck disable=SC2193
             echo "| Upload | $(if [[ '${{ github.ref }}' == 'refs/heads/${{ github.event.repository.default_branch }}' ]] || [[ '${{ github.ref }}' == refs/tags/* ]]; then echo '✅ Yes'; else echo '⏭️ Skipped (not main/tag)'; fi) |"
           } >> "$GITHUB_STEP_SUMMARY"
