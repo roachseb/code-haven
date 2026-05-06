@@ -289,9 +289,11 @@ jobs:
           COPYLEFT=$(grep -iE "GPL|AGPL|LGPL|SSPL|EUPL" "$REPORT" 2>/dev/null || true)
           if [[ -n "$COPYLEFT" ]]; then
             echo "::warning::Copyleft licenses detected — review required"
-            echo "" >> "$REPORT"
-            echo "## ⚠️ Copyleft Licenses Detected" >> "$REPORT"
-            echo "$COPYLEFT" >> "$REPORT"
+            {
+              echo ""
+              echo "## ⚠️ Copyleft Licenses Detected"
+              echo "$COPYLEFT"
+            } >> "$REPORT"
           fi
 
       - uses: actions/upload-artifact@v4
