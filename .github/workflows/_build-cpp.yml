@@ -208,6 +208,7 @@ jobs:
       - name: CMake Configure (for compile_commands.json)
         run: |
           CMAKE_ARGS="-B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cpp_build_type }}"
           TOOLCHAIN=$(find build -name 'conan_toolchain.cmake' -print -quit 2>/dev/null || true)
           if [[ -n "$TOOLCHAIN" ]]; then
             CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN"

@@ -50,26 +50,26 @@ jobs:
           # ── MkDocs (top-level site) ────────────────────
           if [[ -d artifacts/mkdocs-site ]]; then
             cp -r artifacts/mkdocs-site/* public/
-            SECTIONS[mkdocs]="MkDocs Documentation|/|📖|Full project documentation site"
+            SECTIONS[mkdocs]="MkDocs Documentation|./|📖|Full project documentation site"
           fi
 
           # ── Java — Javadoc ─────────────────────────────
           if [[ -d artifacts/javadoc ]]; then
             mkdir -p public/java/apidocs
             cp -r artifacts/javadoc/**/apidocs/* public/java/apidocs/ 2>/dev/null || true
-            SECTIONS[javadoc]="Java API Docs (Javadoc)|/java/apidocs/|☕|Auto-generated API reference from source code annotations"
+            SECTIONS[javadoc]="Java API Docs (Javadoc)|./java/apidocs/|☕|Auto-generated API reference from source code annotations"
           fi
           if [[ -d artifacts/gradle-javadoc ]]; then
             mkdir -p public/java/apidocs
             cp -r artifacts/gradle-javadoc/**/javadoc/* public/java/apidocs/ 2>/dev/null || true
-            SECTIONS[javadoc]="Java API Docs (Javadoc)|/java/apidocs/|☕|Auto-generated API reference from source code annotations"
+            SECTIONS[javadoc]="Java API Docs (Javadoc)|./java/apidocs/|☕|Auto-generated API reference from source code annotations"
           fi
 
           # ── Java — JaCoCo coverage ─────────────────────
           for d in artifacts/maven-target; do
             [[ -d "$d" ]] || continue
             find "$d" -path '*/site/jacoco' -type d -exec sh -c 'mkdir -p public/java/jacoco && cp -r "$1"/* public/java/jacoco/' _ {} \; 2>/dev/null || true
-            SECTIONS[jacoco]="Java Code Coverage (JaCoCo)|/java/jacoco/|📊|Line and branch coverage from unit tests"
+            SECTIONS[jacoco]="Java Code Coverage (JaCoCo)|./java/jacoco/|📊|Line and branch coverage from unit tests"
             find "$d" -name 'dependency-check-report.html' -exec sh -c 'mkdir -p public/java && cp "$1" public/java/' _ {} \; 2>/dev/null || true
           done
 
@@ -77,70 +77,70 @@ jobs:
           if [[ -d artifacts/python-coverage/htmlcov ]]; then
             mkdir -p public/python/coverage
             cp -r artifacts/python-coverage/htmlcov/* public/python/coverage/
-            SECTIONS[pycov]="Python Code Coverage|/python/coverage/|🐍|Line-by-line test coverage report"
+            SECTIONS[pycov]="Python Code Coverage|./python/coverage/|🐍|Line-by-line test coverage report"
           fi
 
           # ── Go — Coverage ──────────────────────────────
           if [[ -d artifacts/go-reports ]]; then
             mkdir -p public/golang
             cp -r artifacts/go-reports/* public/golang/
-            SECTIONS[gocov]="Go Test Reports|/golang/|🐹|Test results and code coverage"
+            SECTIONS[gocov]="Go Test Reports|./golang/|🐹|Test results and code coverage"
           fi
 
           # ── Rust — Documentation ───────────────────────
           if [[ -d artifacts/rust-doc ]]; then
             mkdir -p public/rust/doc
             cp -r artifacts/rust-doc/* public/rust/doc/
-            SECTIONS[rustdoc]="Rust API Docs (rustdoc)|/rust/doc/|🦀|Auto-generated API reference from doc comments"
+            SECTIONS[rustdoc]="Rust API Docs (rustdoc)|./rust/doc/|🦀|Auto-generated API reference from doc comments"
           fi
 
           # ── .NET — Test Results ────────────────────────
           if [[ -d artifacts/dotnet-results ]]; then
             mkdir -p public/dotnet
             cp -r artifacts/dotnet-results/* public/dotnet/ 2>/dev/null || true
-            SECTIONS[dotnet]="\.NET Test Results|/dotnet/|🔷|Unit test output and code coverage"
+            SECTIONS[dotnet]="\.NET Test Results|./dotnet/|🔷|Unit test output and code coverage"
           fi
 
           # ── Angular — Coverage ─────────────────────────
           if [[ -d artifacts/angular-coverage ]]; then
             mkdir -p public/angular/coverage
             cp -r artifacts/angular-coverage/* public/angular/coverage/
-            SECTIONS[angular]="Angular Code Coverage|/angular/coverage/|🅰️|Component and service test coverage"
+            SECTIONS[angular]="Angular Code Coverage|./angular/coverage/|🅰️|Component and service test coverage"
           fi
 
           # ── C++ — Doxygen ──────────────────────────────
           if [[ -d artifacts/cpp-doxygen ]]; then
             mkdir -p public/cpp/docs
             cp -r artifacts/cpp-doxygen/* public/cpp/docs/
-            SECTIONS[cppdoc]="C++ API Docs (Doxygen)|/cpp/docs/|⚙️|Auto-generated API reference from source annotations"
+            SECTIONS[cppdoc]="C++ API Docs (Doxygen)|./cpp/docs/|⚙️|Auto-generated API reference from source annotations"
           fi
 
           # ── PHP — Reports ──────────────────────────────
           if [[ -d artifacts/php-reports ]]; then
             mkdir -p public/php
             cp -r artifacts/php-reports/* public/php/
-            SECTIONS[php]="PHP Test Reports|/php/|🐘|Unit test results and coverage"
+            SECTIONS[php]="PHP Test Reports|./php/|🐘|Unit test results and coverage"
           fi
 
           # ── Playwright — E2E ───────────────────────────
           if [[ -d artifacts/playwright-report ]]; then
             mkdir -p public/playwright
             cp -r artifacts/playwright-report/* public/playwright/
-            SECTIONS[playwright]="Playwright E2E Report|/playwright/|🎭|End-to-end browser test results"
+            SECTIONS[playwright]="Playwright E2E Report|./playwright/|🎭|End-to-end browser test results"
           fi
 
           # ── Hurl — API Tests ───────────────────────────
           if [[ -d artifacts/hurl-report ]]; then
             mkdir -p public/hurl
             cp -r artifacts/hurl-report/* public/hurl/
-            SECTIONS[hurl]="Hurl API Test Report|/hurl/|🌐|HTTP API integration test results"
+            SECTIONS[hurl]="Hurl API Test Report|./hurl/|🌐|HTTP API integration test results"
           fi
 
           # ── Code Metrics — SCC ─────────────────────────
           if [[ -d artifacts/scc-report ]]; then
             mkdir -p public/code-metrics
             cp -r artifacts/scc-report/* public/code-metrics/
-            SECTIONS[scc]="Code Metrics (SCC)|/code-metrics/|📏|Lines of code, complexity, and language breakdown"
+            SECTIONS[scc]="Code Metrics (SCC)|./code-metrics/|📏|Lines of code, complexity, and language breakdown"
           fi
 
           # ── Frontend SPA detection ─────────────────────
@@ -157,7 +157,7 @@ jobs:
                 # Copy the frontend build to a /app/ subfolder
                 mkdir -p public/app
                 cp -r "$FRONTEND_DIR"/* public/app/
-                SECTIONS[frontend]="Frontend Application|/app/|🖥️|Live preview of the built frontend application"
+                SECTIONS[frontend]="Frontend Application|./app/|🖥️|Live preview of the built frontend application"
                 break
               fi
             fi
