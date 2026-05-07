@@ -95,9 +95,10 @@ jobs:
             CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage"
           fi
 
-          # Use Conan toolchain if available
-          if [[ -f build/conan_toolchain.cmake ]]; then
-            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake"
+          # Use Conan toolchain if available (Conan 2.x may place it in subdirectories)
+          TOOLCHAIN=$(find build -name 'conan_toolchain.cmake' -print -quit 2>/dev/null || true)
+          if [[ -n "$TOOLCHAIN" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN"
           fi
 
           # Intentional word splitting of cmake args
@@ -192,8 +193,9 @@ jobs:
       - name: CMake Configure (for compile_commands.json)
         run: |
           CMAKE_ARGS="-B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-          if [[ -f build/conan_toolchain.cmake ]]; then
-            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake"
+          TOOLCHAIN=$(find build -name 'conan_toolchain.cmake' -print -quit 2>/dev/null || true)
+          if [[ -n "$TOOLCHAIN" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN"
           fi
           # shellcheck disable=SC2086
           cmake $CMAKE_ARGS
@@ -291,11 +293,19 @@ jobs:
 
           if [[ -n "$UNFORMATTED" ]]; then
             echo "::warning::The following files need formatting:$UNFORMATTED"
+            FILES_LIST=$(echo "$UNFORMATTED" | tr ' ' '\n' | grep -v '^$')
             {
               echo "## ⚙️ Format Check — ❌ Failed"
+              echo ""
               echo "Files needing format:"
               echo '```'
-              echo "$UNFORMATTED" | tr ' ' '\n' | grep -v '^$'
+              echo "$FILES_LIST"
+              echo '```'
+              echo ""
+              echo "### 🔧 Fix locally"
+              echo "Run the following command in your project root to auto-format:"
+              echo '```bash'
+              echo "clang-format -i $UNFORMATTED"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
