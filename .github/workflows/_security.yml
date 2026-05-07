@@ -128,7 +128,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: checkmarx/kics-github-action@v2.1.3
+      - uses: checkmarx/kics-github-action@v2
         with:
           path: .
           output_path: kics-results
@@ -247,7 +247,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: google/osv-scanner-action/osv-scanner-action@v2
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.5
         with:
           scan-args: |-
             --recursive
