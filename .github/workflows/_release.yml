@@ -263,8 +263,8 @@ jobs:
   # │ C/C++ — Publish Conan package
   # └──────────────────────────────────────────────────────────
   cpp-release:
-    name: "⚙️ Conan Package"
-    if: inputs.has_cmake == 'true' && inputs.has_conan == 'true'
+    name: "⚙️ C++ Library Package"
+    if: inputs.has_cmake == 'true'
     needs: create-release
     runs-on: ${{ inputs.runner }}
     steps:
@@ -273,7 +273,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends cmake ninja-build
-      - name: Setup Conan & publish
+
+      - name: Setup Conan (if conanfile present)
+        if: inputs.has_conan == 'true'
         run: |
           pip install conan
           conan profile detect --force
@@ -285,10 +287,62 @@ jobs:
             fi
           fi
 
-          # Create package with version from tag
+          # Install Conan dependencies
+          conan install . --output-folder=build --build=missing \
+            -s build_type=${{ inputs.cpp_build_type }} \
+            -s compiler.cppstd=${{ inputs.cpp_standard }}
+        env:
+          CONAN_LOGIN_USERNAME: ${{ secrets.CONAN_LOGIN_USERNAME }}
+          CONAN_PASSWORD: ${{ secrets.CONAN_PASSWORD }}
+
+      - name: Build library (Release)
+        run: |
           VERSION="${{ inputs.tag_name }}"
           VERSION="${VERSION#v}"
-          conan create . --version="$VERSION" --build=missing \
+
+          CMAKE_ARGS="-B build -G Ninja"
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release"
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_CXX_STANDARD=${{ inputs.cpp_standard }}"
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=install"
+          CMAKE_ARGS="$CMAKE_ARGS -DBUILD_TESTS=OFF"
+
+          # Use Conan toolchain if available
+          TOOLCHAIN=$(find build -name 'conan_toolchain.cmake' -print -quit 2>/dev/null || true)
+          if [[ -n "$TOOLCHAIN" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN"
+          fi
+
+          # shellcheck disable=SC2086
+          cmake $CMAKE_ARGS
+          cmake --build build --parallel "$(nproc)"
+          cmake --install build
+
+      - name: Create distribution tarball
+        run: |
+          VERSION="${{ inputs.tag_name }}"
+          VERSION="${VERSION#v}"
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          ARCHIVE="${REPO_NAME}-${VERSION}-linux-x64.tar.gz"
+
+          tar -czf "$ARCHIVE" -C install .
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          # Show what's in the package
+          echo "📦 Package contents:"
+          tar -tzf "$ARCHIVE" | head -30
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          files: ${{ env.ARCHIVE }}
+
+      - name: Publish Conan package
+        if: inputs.has_conan == 'true'
+        run: |
+          pip install conan 2>/dev/null || true
+          conan create . --version="${{ env.VERSION }}" --build=missing \
             -s build_type=${{ inputs.cpp_build_type }} \
             -s compiler.cppstd=${{ inputs.cpp_standard }}
 
@@ -299,6 +353,42 @@ jobs:
         env:
           CONAN_LOGIN_USERNAME: ${{ secrets.CONAN_LOGIN_USERNAME }}
           CONAN_PASSWORD: ${{ secrets.CONAN_PASSWORD }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## ⚙️ C++ Library Release"
+            echo ""
+            echo "> **What this does:** Builds the library in Release mode, packages headers + compiled"
+            echo "> binaries into a distributable tarball, and attaches it to the GitHub Release."
+            echo ""
+            echo "| Artifact | Details |"
+            echo "|----------|---------|"
+            echo "| Tarball | \`${{ env.ARCHIVE }}\` |"
+            echo "| Contains | \`lib/\` (compiled .a/.so) + \`include/\` (headers) + CMake config |"
+            echo "| Conan | $(if [[ '${{ inputs.has_conan }}' == 'true' ]]; then echo '✅ Published'; else echo '⬜ N/A'; fi) |"
+            echo ""
+            echo "### 📥 How to consume this library"
+            echo ""
+            echo "**Option 1: CMake FetchContent (source-level, recommended)**"
+            echo '```cmake'
+            echo "include(FetchContent)"
+            echo "FetchContent_Declare(${{ github.event.repository.name }}"
+            echo "  GIT_REPOSITORY ${{ github.server_url }}/${{ github.repository }}.git"
+            echo "  GIT_TAG ${{ inputs.tag_name }}"
+            echo ")"
+            echo "FetchContent_MakeAvailable(${{ github.event.repository.name }})"
+            echo "target_link_libraries(your_app PRIVATE ${{ github.event.repository.name }})"
+            echo '```'
+            echo ""
+            echo "**Option 2: Download pre-built tarball**"
+            echo '```bash'
+            echo "wget ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ inputs.tag_name }}/${{ env.ARCHIVE }}"
+            echo "tar xzf ${{ env.ARCHIVE }} -C /usr/local"
+            echo "# Then in CMake: find_package(${{ github.event.repository.name }} REQUIRED)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ┌──────────────────────────────────────────────────────────
   # │ .NET — Publish NuGet
@@ -345,6 +435,6 @@ jobs:
             echo "| Python Package | ${{ needs.python-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| Go Binaries    | ${{ needs.go-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| Rust Crate     | ${{ needs.rust-release.result == 'success' && '✅' || '⬜ skipped' }} |"
-            echo "| C++ Conan      | ${{ needs.cpp-release.result == 'success' && '✅' || '⬜ skipped' }} |"
+            echo \"| C++ Library    | ${{ needs.cpp-release.result == 'success' && '✅' || '⬜ skipped' }} |\"
             echo "| NuGet Package  | ${{ needs.dotnet-release.result == 'success' && '✅' || '⬜ skipped' }} |"
           } >> "$GITHUB_STEP_SUMMARY"
