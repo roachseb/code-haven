@@ -1,7 +1,12 @@
 # ═══════════════════════════════════════════════════════════════
 # Code Haven — GitHub Pages Deployment
-# Aggregates all reports from build/test/quality jobs and
-# publishes them to GitHub Pages.
+# Aggregates all reports/docs from build/test/quality jobs and
+# publishes them to GitHub Pages with a smart auto-generated index.
+#
+# Frontend projects: deploys the built SPA/SSR output as the site
+# Backend/Library projects: generates a portal with links to
+#   API docs, test coverage, security reports, and metrics
+#
 # Internal reusable workflow — called from devsecops.yml
 # ═══════════════════════════════════════════════════════════════
 name: "📄 Pages"
@@ -10,7 +15,7 @@ on:
   workflow_call:
     inputs:
       runner: { type: string, default: 'ubuntu-latest' }
-      pages_disabled: { type: boolean, default: false }
+      pages_disabled: { type: boolean, default: true }
       is_default_branch: { type: string, default: 'false' }
       is_tag: { type: string, default: 'false' }
 
@@ -39,119 +44,307 @@ jobs:
           mkdir -p public
           shopt -s nullglob
 
-          # ── MkDocs (top-level) ─────────────────────────
+          # ── Track what we found for the index ──────────
+          declare -A SECTIONS
+
+          # ── MkDocs (top-level site) ────────────────────
           if [[ -d artifacts/mkdocs-site ]]; then
             cp -r artifacts/mkdocs-site/* public/
+            SECTIONS[mkdocs]="MkDocs Documentation|/|📖|Full project documentation site"
           fi
 
-          # ── Java (Maven) ───────────────────────────────
+          # ── Java — Javadoc ─────────────────────────────
           if [[ -d artifacts/javadoc ]]; then
             mkdir -p public/java/apidocs
             cp -r artifacts/javadoc/**/apidocs/* public/java/apidocs/ 2>/dev/null || true
+            SECTIONS[javadoc]="Java API Docs (Javadoc)|/java/apidocs/|☕|Auto-generated API reference from source code annotations"
           fi
-          for d in artifacts/maven-target; do
-            [[ -d "$d" ]] || continue
-            find "$d" -path '*/site/jacoco' -type d -exec sh -c 'mkdir -p public/java/jacoco && cp -r "$1"/* public/java/jacoco/' _ {} \; 2>/dev/null || true
-            find "$d" -name 'dependency-check-report.html' -exec sh -c 'mkdir -p public/java && cp "$1" public/java/' _ {} \; 2>/dev/null || true
-          done
-
-          # ── Java (Gradle) ──────────────────────────────
           if [[ -d artifacts/gradle-javadoc ]]; then
             mkdir -p public/java/apidocs
             cp -r artifacts/gradle-javadoc/**/javadoc/* public/java/apidocs/ 2>/dev/null || true
+            SECTIONS[javadoc]="Java API Docs (Javadoc)|/java/apidocs/|☕|Auto-generated API reference from source code annotations"
           fi
 
-          # ── Python ─────────────────────────────────────
+          # ── Java — JaCoCo coverage ─────────────────────
+          for d in artifacts/maven-target; do
+            [[ -d "$d" ]] || continue
+            find "$d" -path '*/site/jacoco' -type d -exec sh -c 'mkdir -p public/java/jacoco && cp -r "$1"/* public/java/jacoco/' _ {} \; 2>/dev/null || true
+            SECTIONS[jacoco]="Java Code Coverage (JaCoCo)|/java/jacoco/|📊|Line and branch coverage from unit tests"
+            find "$d" -name 'dependency-check-report.html' -exec sh -c 'mkdir -p public/java && cp "$1" public/java/' _ {} \; 2>/dev/null || true
+          done
+
+          # ── Python — Coverage ──────────────────────────
           if [[ -d artifacts/python-coverage/htmlcov ]]; then
             mkdir -p public/python/coverage
             cp -r artifacts/python-coverage/htmlcov/* public/python/coverage/
+            SECTIONS[pycov]="Python Code Coverage|/python/coverage/|🐍|Line-by-line test coverage report"
           fi
 
-          # ── Go ─────────────────────────────────────────
+          # ── Go — Coverage ──────────────────────────────
           if [[ -d artifacts/go-reports ]]; then
             mkdir -p public/golang
             cp -r artifacts/go-reports/* public/golang/
+            SECTIONS[gocov]="Go Test Reports|/golang/|🐹|Test results and code coverage"
           fi
 
-          # ── Rust ───────────────────────────────────────
+          # ── Rust — Documentation ───────────────────────
           if [[ -d artifacts/rust-doc ]]; then
             mkdir -p public/rust/doc
             cp -r artifacts/rust-doc/* public/rust/doc/
+            SECTIONS[rustdoc]="Rust API Docs (rustdoc)|/rust/doc/|🦀|Auto-generated API reference from doc comments"
           fi
 
-          # ── .NET ───────────────────────────────────────
+          # ── .NET — Test Results ────────────────────────
           if [[ -d artifacts/dotnet-results ]]; then
             mkdir -p public/dotnet
             cp -r artifacts/dotnet-results/* public/dotnet/ 2>/dev/null || true
+            SECTIONS[dotnet]="\.NET Test Results|/dotnet/|🔷|Unit test output and code coverage"
           fi
 
-          # ── Angular ────────────────────────────────────
+          # ── Angular — Coverage ─────────────────────────
           if [[ -d artifacts/angular-coverage ]]; then
             mkdir -p public/angular/coverage
             cp -r artifacts/angular-coverage/* public/angular/coverage/
+            SECTIONS[angular]="Angular Code Coverage|/angular/coverage/|🅰️|Component and service test coverage"
           fi
 
-          # ── PHP ────────────────────────────────────────
+          # ── C++ — Doxygen ──────────────────────────────
+          if [[ -d artifacts/cpp-doxygen ]]; then
+            mkdir -p public/cpp/docs
+            cp -r artifacts/cpp-doxygen/* public/cpp/docs/
+            SECTIONS[cppdoc]="C++ API Docs (Doxygen)|/cpp/docs/|⚙️|Auto-generated API reference from source annotations"
+          fi
+
+          # ── PHP — Reports ──────────────────────────────
           if [[ -d artifacts/php-reports ]]; then
             mkdir -p public/php
             cp -r artifacts/php-reports/* public/php/
+            SECTIONS[php]="PHP Test Reports|/php/|🐘|Unit test results and coverage"
           fi
 
-          # ── Playwright ─────────────────────────────────
+          # ── Playwright — E2E ───────────────────────────
           if [[ -d artifacts/playwright-report ]]; then
             mkdir -p public/playwright
             cp -r artifacts/playwright-report/* public/playwright/
+            SECTIONS[playwright]="Playwright E2E Report|/playwright/|🎭|End-to-end browser test results"
           fi
 
-          # ── Hurl ───────────────────────────────────────
+          # ── Hurl — API Tests ───────────────────────────
           if [[ -d artifacts/hurl-report ]]; then
             mkdir -p public/hurl
             cp -r artifacts/hurl-report/* public/hurl/
+            SECTIONS[hurl]="Hurl API Test Report|/hurl/|🌐|HTTP API integration test results"
           fi
 
-          # ── Code Metrics ───────────────────────────────
+          # ── Code Metrics — SCC ─────────────────────────
           if [[ -d artifacts/scc-report ]]; then
             mkdir -p public/code-metrics
             cp -r artifacts/scc-report/* public/code-metrics/
+            SECTIONS[scc]="Code Metrics (SCC)|/code-metrics/|📏|Lines of code, complexity, and language breakdown"
           fi
 
-          # ── Auto-generate index ────────────────────────
-          if [[ ! -f public/index.html ]]; then
-            cat > public/index.html << 'HEREDOC'
+          # ── Frontend SPA detection ─────────────────────
+          # If npm-dist or angular-dist contains index.html, this is a
+          # frontend project — deploy the built app as the site root
+          IS_FRONTEND="false"
+          for dist_dir in artifacts/npm-dist artifacts/angular-dist; do
+            if [[ -d "$dist_dir" ]]; then
+              # Look for index.html in the dist output
+              FRONTEND_INDEX=$(find "$dist_dir" -name 'index.html' -print -quit 2>/dev/null)
+              if [[ -n "$FRONTEND_INDEX" ]]; then
+                IS_FRONTEND="true"
+                FRONTEND_DIR=$(dirname "$FRONTEND_INDEX")
+                # Copy the frontend build to a /app/ subfolder
+                mkdir -p public/app
+                cp -r "$FRONTEND_DIR"/* public/app/
+                SECTIONS[frontend]="Frontend Application|/app/|🖥️|Live preview of the built frontend application"
+                break
+              fi
+            fi
+          done
+
+          # ── Generate smart index page ──────────────────
+          # Skip only if MkDocs already produced an index.html
+          if [[ ! -f public/index.html ]] || [[ "$IS_FRONTEND" == "true" && ! -d artifacts/mkdocs-site ]]; then
+
+            REPO_NAME="${GITHUB_REPOSITORY##*/}"
+            COMMIT_SHA="${GITHUB_SHA:0:7}"
+            BRANCH="${GITHUB_REF_NAME}"
+            RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+            cat > public/index.html << HEREDOC
           <!DOCTYPE html>
           <html lang="en">
           <head>
-            <meta charset="utf-8"><title>CI Reports</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>${REPO_NAME} — Project Portal</title>
             <style>
-              body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem}
-              h1{border-bottom:2px solid #e1e4e8;padding-bottom:.5rem}
-              ul{list-style:none;padding:0}
-              li{padding:.5rem 0;border-bottom:1px solid #f0f0f0}
-              a{text-decoration:none;color:#0366d6;font-size:1.1rem}
-              a:hover{text-decoration:underline}
-              .meta{color:#586069;font-size:.85rem}
+              :root {
+                --bg: #0d1117; --surface: #161b22; --border: #30363d;
+                --text: #e6edf3; --text-muted: #8b949e; --accent: #58a6ff;
+                --green: #3fb950; --yellow: #d29922; --red: #f85149;
+              }
+              @media (prefers-color-scheme: light) {
+                :root {
+                  --bg: #ffffff; --surface: #f6f8fa; --border: #d0d7de;
+                  --text: #1f2328; --text-muted: #656d76; --accent: #0969da;
+                  --green: #1a7f37; --yellow: #9a6700; --red: #cf222e;
+                }
+              }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+                background: var(--bg); color: var(--text);
+                line-height: 1.6; min-height: 100vh;
+              }
+              .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+              header {
+                text-align: center; padding: 2.5rem 0 1.5rem;
+                border-bottom: 1px solid var(--border); margin-bottom: 2rem;
+              }
+              header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+              header p { color: var(--text-muted); font-size: 0.95rem; }
+              .meta { display: flex; gap: 1.5rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+              .meta span {
+                font-size: 0.8rem; color: var(--text-muted);
+                background: var(--surface); border: 1px solid var(--border);
+                padding: 0.25rem 0.75rem; border-radius: 2rem;
+              }
+              .meta a { color: var(--accent); text-decoration: none; }
+              .category { margin-bottom: 2rem; }
+              .category h2 {
+                font-size: 1.1rem; color: var(--text-muted); text-transform: uppercase;
+                letter-spacing: 0.05em; margin-bottom: 0.75rem;
+                padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+              }
+              .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+              .card {
+                background: var(--surface); border: 1px solid var(--border);
+                border-radius: 8px; padding: 1.25rem; transition: border-color 0.2s;
+                text-decoration: none; color: var(--text); display: block;
+              }
+              .card:hover { border-color: var(--accent); }
+              .card .icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+              .card .title { font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem; }
+              .card .desc { font-size: 0.85rem; color: var(--text-muted); }
+              footer {
+                text-align: center; padding: 2rem 0; margin-top: 2rem;
+                border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.8rem;
+              }
+              footer a { color: var(--accent); text-decoration: none; }
+              .empty {
+                text-align: center; padding: 3rem; color: var(--text-muted);
+                background: var(--surface); border-radius: 8px; border: 1px dashed var(--border);
+              }
             </style>
           </head>
           <body>
-            <h1>📊 CI Reports</h1>
-            <p class="meta">Auto-generated by Code Haven CI Templates</p>
-            <ul>
+            <div class="container">
+              <header>
+                <h1>📦 ${REPO_NAME}</h1>
+                <p>Project Portal — Auto-generated by Code Haven</p>
+                <div class="meta">
+                  <span>🔀 Branch: <strong>${BRANCH}</strong></span>
+                  <span>🔖 Commit: <code>${COMMIT_SHA}</code></span>
+                  <span>🔗 <a href="${RUN_URL}">Pipeline Run</a></span>
+                </div>
+              </header>
           HEREDOC
-            for dir in public/*/; do
-              name=$(basename "$dir")
-              echo "    <li><a href=\"${name}/\">📁 ${name}</a></li>" >> public/index.html
+
+            # Categorize sections
+            declare -a CAT_DOCS=() CAT_COVERAGE=() CAT_TESTS=() CAT_METRICS=() CAT_APP=()
+
+            for key in "${!SECTIONS[@]}"; do
+              IFS='|' read -r label path icon desc <<< "${SECTIONS[$key]}"
+              entry="$icon|$label|$path|$desc"
+              case "$key" in
+                javadoc|rustdoc|cppdoc|mkdocs) CAT_DOCS+=("$entry") ;;
+                jacoco|pycov|gocov|angular)    CAT_COVERAGE+=("$entry") ;;
+                dotnet|php|playwright|hurl)    CAT_TESTS+=("$entry") ;;
+                scc)                           CAT_METRICS+=("$entry") ;;
+                frontend)                      CAT_APP+=("$entry") ;;
+              esac
             done
-            cat >> public/index.html << 'HEREDOC'
-            </ul>
+
+            render_category() {
+              local title="$1"
+              shift
+              local items=("$@")
+              [[ ${#items[@]} -eq 0 ]] && return
+              cat >> public/index.html << CATEOF
+              <div class="category">
+                <h2>${title}</h2>
+                <div class="cards">
+          CATEOF
+              for item in "${items[@]}"; do
+                IFS='|' read -r icon label path desc <<< "$item"
+                cat >> public/index.html << CARDEOF
+                  <a class="card" href="${path}">
+                    <div class="icon">${icon}</div>
+                    <div class="title">${label}</div>
+                    <div class="desc">${desc}</div>
+                  </a>
+          CARDEOF
+              done
+              cat >> public/index.html << CATEOF
+                </div>
+              </div>
+          CATEOF
+            }
+
+            # Render in order: App > Docs > Coverage > Tests > Metrics
+            render_category "Application" "${CAT_APP[@]}"
+            render_category "API Documentation" "${CAT_DOCS[@]}"
+            render_category "Code Coverage" "${CAT_COVERAGE[@]}"
+            render_category "Test Reports" "${CAT_TESTS[@]}"
+            render_category "Metrics" "${CAT_METRICS[@]}"
+
+            # If nothing was found, show an empty state
+            if [[ ${#SECTIONS[@]} -eq 0 ]]; then
+              cat >> public/index.html << EMPTYEOF
+              <div class="empty">
+                <p>No reports or documentation artifacts were produced by this pipeline run.</p>
+                <p>Enable doc generation in your workflow inputs (e.g. <code>java_doc_enabled: true</code>) to populate this page.</p>
+              </div>
+          EMPTYEOF
+            fi
+
+            cat >> public/index.html << HEREDOC
+              <footer>
+                Generated by <a href="https://github.com/roachseb/code-haven">Code Haven</a>
+                · $(date -u '+%Y-%m-%d %H:%M UTC')
+                · Run <a href="${RUN_URL}">#${GITHUB_RUN_NUMBER}</a>
+              </footer>
+            </div>
           </body>
           </html>
           HEREDOC
           fi
 
+      - name: Summary
+        if: always()
+        run: |
+          TOTAL_FILES=$(find public -type f 2>/dev/null | wc -l)
+          TOTAL_DIRS=$(find public -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
           {
-            echo "## 📄 Pages Content"
+            echo "## 📄 GitHub Pages Deployment"
             echo ""
-            find public -maxdepth 2 -type f | head -50 | sort | sed 's/^/- /'
+            echo "> **What this does:** Publishes project documentation, API references, test coverage reports,"
+            echo "> and metrics to GitHub Pages so your team can browse them from a single URL."
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Total files | **${TOTAL_FILES}** |"
+            echo "| Sections | **${TOTAL_DIRS}** |"
+            echo "| URL | \`${{ steps.deploy.outputs.page_url || 'pending' }}\` |"
+            echo ""
+            echo "### 📁 Published Sections"
+            for dir in public/*/; do
+              name=$(basename "$dir")
+              count=$(find "$dir" -type f 2>/dev/null | wc -l)
+              echo "- **${name}/** — ${count} files"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-pages-artifact@v3

@@ -61,7 +61,7 @@ on:
       cypress_disabled: { type: boolean, default: false }
       playwright_disabled: { type: boolean, default: false }
       hurl_disabled: { type: boolean, default: false }
-      pages_disabled: { type: boolean, default: false }
+      pages_disabled: { type: boolean, default: true }
 
       # ── Security toggles ───────────────────────────────
       sast_disabled: { type: boolean, default: false }

@@ -102,10 +102,22 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## 🔧 Actionlint — GitHub Actions Workflow Lint" >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f actionlint-output.json ]] && [[ -s actionlint-output.json ]]; then
-            ISSUES=$(wc -l < actionlint-output.json)
-            echo "- Issues found: **${ISSUES}**" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- ✅ No issues found" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          {
+            echo "## 🔧 Actionlint — GitHub Actions Workflow Lint"
+            echo ""
+            echo "> **What this does:** Validates your GitHub Actions workflow files for syntax errors,"
+            echo "> invalid action references, type mismatches, and other common mistakes."
+            echo ""
+            if [[ -f actionlint-output.json ]] && [[ -s actionlint-output.json ]]; then
+              ISSUES=$(wc -l < actionlint-output.json)
+              echo "- ⚠️ **${ISSUES}** issues found"
+              echo ""
+              echo "### 🔧 Run locally"
+              echo '```bash'
+              echo "# Install: brew install actionlint  OR  go install github.com/rhysd/actionlint/cmd/actionlint@latest"
+              echo "actionlint"
+              echo '```'
+            else
+              echo "- ✅ No issues found"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

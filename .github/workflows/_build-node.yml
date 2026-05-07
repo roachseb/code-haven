@@ -87,6 +87,20 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: node-modules, path: node_modules }
       - run: npm ${{ inputs.node_test_args }}
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 📦 Node.js Test Results"
+            echo ""
+            echo "> **What this does:** Runs your project's test suite (\`npm ${{ inputs.node_test_args }}\`)."
+            echo "> If tests fail, check the output above for details."
+            echo ""
+            echo "#### 🔧 Debug locally"
+            echo '```bash'
+            echo "npm ${{ inputs.node_test_args }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Angular ──────────────────────────────────────────────
   angular-build:

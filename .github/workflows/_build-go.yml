@@ -39,8 +39,28 @@ jobs:
         run: |
           go install gotest.tools/gotestsum@latest
           gotestsum --junitfile go-test-report.xml -- -race -coverprofile=coverage.out ./...
-          go tool cover -func=coverage.out | tail -1 | awk '{print "**Go Coverage:** " $3}' >> "$GITHUB_STEP_SUMMARY"
           go tool cover -html=coverage.out -o coverage.html
+          COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}')
+          TOTAL=$(grep -c '<testcase' go-test-report.xml 2>/dev/null || echo "0")
+          FAILURES=$(grep -c '<failure' go-test-report.xml 2>/dev/null || echo "0")
+          {
+            echo "## 🐹 Go Test & Coverage"
+            echo ""
+            echo "> **What this does:** Runs all Go tests with race detection enabled and measures"
+            echo "> how much of your code is exercised by tests (code coverage)."
+            echo ""
+            if [[ "$FAILURES" -eq 0 ]]; then
+              echo "- ✅ **${TOTAL}** tests passed"
+            else
+              echo "- ❌ **${FAILURES}** of **${TOTAL}** tests failed"
+              echo ""
+              echo "#### 🔧 Debug locally"
+              echo '```bash'
+              echo "go test -race -v ./..."
+              echo '```'
+            fi
+            echo "- 📊 Coverage: **${COVERAGE}**"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -87,7 +107,25 @@ jobs:
           if [[ -n "$unformatted" ]]; then
             echo "::warning::Unformatted Go files:"
             echo "$unformatted"
+            {
+              echo "## 🐹 Go Format Check — ❌ Failed"
+              echo ""
+              echo "> **What this does:** Checks that all Go source files follow the standard"
+              echo "> formatting rules enforced by \`gofmt\`."
+              echo ""
+              echo "Files needing format:"
+              echo '```'
+              echo "$unformatted"
+              echo '```'
+              echo ""
+              echo "### 🔧 Fix locally"
+              echo '```bash'
+              echo "gofmt -w ."
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
+          else
+            echo "## 🐹 Go Format Check — ✅ Passed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   golang-vet:

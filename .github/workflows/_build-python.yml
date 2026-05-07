@@ -62,7 +62,30 @@ jobs:
           coverage run -m pytest --junitxml=pytest-report.xml -v || true
           coverage html
           coverage xml -o coverage.xml
-          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
+          {
+            echo "## 🐍 Python Test & Coverage"
+            echo ""
+            echo "> **What this does:** Runs your Python test suite with pytest and measures"
+            echo "> code coverage to show which parts of your code are tested."
+            echo ""
+            TOTAL=$(grep -c '<testcase' pytest-report.xml 2>/dev/null || echo "0")
+            FAILURES=$(grep -c '<failure' pytest-report.xml 2>/dev/null || echo "0")
+            ERRORS=$(grep -c '<error' pytest-report.xml 2>/dev/null || echo "0")
+            FAIL_COUNT=$((FAILURES + ERRORS))
+            if [[ "$FAIL_COUNT" -eq 0 ]]; then
+              echo "- ✅ **${TOTAL}** tests passed"
+            else
+              echo "- ❌ **${FAIL_COUNT}** of **${TOTAL}** tests failed"
+              echo ""
+              echo "#### 🔧 Debug locally"
+              echo '```bash'
+              echo "pytest -v --tb=short"
+              echo '```'
+            fi
+            echo ""
+            echo "### Coverage"
+            coverage report --format=markdown 2>/dev/null || echo "- Coverage data unavailable"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

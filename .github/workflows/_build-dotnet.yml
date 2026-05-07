@@ -21,6 +21,17 @@ jobs:
         with: { dotnet-version: '${{ inputs.dotnet_version }}' }
       - run: dotnet restore
       - run: dotnet build --no-restore
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🔷 .NET Build"
+            echo ""
+            echo "> **What this does:** Restores NuGet packages and compiles your .NET project."
+            echo "> A successful build means your code compiles without errors."
+            echo ""
+            echo "- SDK: \`.NET ${{ inputs.dotnet_version }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Publish for Docker
         run: dotnet publish --no-build --configuration Release -o publish
       - name: Upload Docker inputs (.NET)
@@ -40,10 +51,39 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '${{ inputs.dotnet_version }}' }
       - name: Test
+        id: test
         run: |
           dotnet test --no-build --verbosity normal \
             --logger "trx;LogFileName=test-results.trx" \
             --collect:"XPlat Code Coverage"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🔷 .NET Test Results"
+            echo ""
+            echo "> **What this does:** Runs all unit tests in your .NET solution and collects"
+            echo "> code coverage data to measure how well your tests exercise the codebase."
+            echo ""
+            TRX=$(find . -name 'test-results.trx' -print -quit 2>/dev/null)
+            if [[ -n "$TRX" ]]; then
+              TOTAL=$(grep -c '<UnitTestResult' "$TRX" 2>/dev/null || echo "0")
+              PASSED=$(grep -c 'outcome="Passed"' "$TRX" 2>/dev/null || echo "0")
+              FAILED=$(grep -c 'outcome="Failed"' "$TRX" 2>/dev/null || echo "0")
+              if [[ "$FAILED" -eq 0 ]]; then
+                echo "- ✅ **${PASSED}** of **${TOTAL}** tests passed"
+              else
+                echo "- ❌ **${FAILED}** of **${TOTAL}** tests failed"
+                echo ""
+                echo "#### 🔧 Debug locally"
+                echo '```bash'
+                echo "dotnet test --verbosity detailed"
+                echo '```'
+              fi
+            else
+              echo "- ⚠️ No test results found"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -59,7 +99,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '${{ inputs.dotnet_version }}' }
-      - run: dotnet format --verify-no-changes
+      - name: Check formatting
+        run: |
+          if ! dotnet format --verify-no-changes 2>&1 | tee format-output.txt; then
+            {
+              echo "## 🔷 .NET Format Check — ❌ Failed"
+              echo ""
+              echo "> **What this does:** Checks that your C#/F# code follows the project's"
+              echo "> formatting rules defined in \`.editorconfig\`."
+              echo ""
+              echo "### 🔧 Fix locally"
+              echo '```bash'
+              echo "dotnet format"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "## 🔷 .NET Format Check — ✅ Passed" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   dotnet-publish:
     name: "🔷 .NET Publish (NuGet)"

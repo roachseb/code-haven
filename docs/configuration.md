@@ -29,7 +29,7 @@ All toggles follow the pattern `<stack>_disabled` — set to `true` to skip:
 | `cypress_disabled` | Cypress E2E tests |
 | `playwright_disabled` | Playwright E2E tests |
 | `hurl_disabled` | Hurl API tests |
-| `pages_disabled` | GitHub Pages report deployment |
+| `pages_disabled` | GitHub Pages portal deployment (default: **true** — opt-in) |
 
 ## Security Toggles
 

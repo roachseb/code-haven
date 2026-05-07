@@ -147,21 +147,36 @@ jobs:
         if: always()
         run: |
           {
-            echo "## ⚙️ C++ Build & Test Results"
+            echo "## ⚙️ C++ Build & Test"
             echo ""
+            echo "> **What this does:** Compiles your C/C++ project using CMake + Ninja, runs unit tests"
+            echo "> via CTest, and optionally collects code coverage with gcovr."
+            echo ""
+            echo "### Build Configuration"
             echo "| Setting | Value |"
             echo "|---------|-------|"
-            echo "| Compiler | ${{ inputs.cpp_compiler }} ${{ inputs.cpp_compiler_version }} |"
+            echo "| Compiler | \`${{ inputs.cpp_compiler }} ${{ inputs.cpp_compiler_version }}\` |"
             echo "| Standard | C++${{ inputs.cpp_standard }} |"
             echo "| Build Type | ${{ inputs.cpp_build_type }} |"
             echo "| Conan | ${{ inputs.has_conan }} |"
             echo "| Coverage | ${{ inputs.cpp_coverage_enabled }} |"
             echo ""
+            echo "### Test Results"
             if [[ -f build/test-results.xml ]]; then
               TESTS=$(grep -c '<testcase' build/test-results.xml 2>/dev/null || echo "0")
               FAILURES=$(grep -c '<failure' build/test-results.xml 2>/dev/null || echo "0")
-              echo "### Test Results"
-              echo "- Total: **${TESTS}** | Failures: **${FAILURES}**"
+              if [[ "$FAILURES" -eq 0 ]]; then
+                echo "- ✅ **${TESTS}** tests passed"
+              else
+                echo "- ❌ **${FAILURES}** of **${TESTS}** tests failed"
+                echo ""
+                echo "#### 🔧 Debug locally"
+                echo '```bash'
+                echo "cmake --build build && cd build && ctest --output-on-failure"
+                echo '```'
+              fi
+            else
+              echo "- ⚠️ No test results found — does your project have CTest targets?"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -237,21 +252,44 @@ jobs:
         if: always()
         run: |
           {
-            echo "## ⚙️ C++ Static Analysis"
+            echo "## 🔍 C++ Static Analysis"
+            echo ""
+            echo "> **What this does:** Runs static analysis tools to catch bugs, undefined behavior,"
+            echo "> and style issues without executing your code."
             echo ""
             echo "### clang-tidy"
+            echo "> Checks for common C++ pitfalls, modernization opportunities, and bug-prone patterns."
             if [[ -f clang-tidy-report.txt ]]; then
               WARNINGS=$(grep -c "warning:" clang-tidy-report.txt 2>/dev/null || echo "0")
               ERRORS=$(grep -c "error:" clang-tidy-report.txt 2>/dev/null || echo "0")
-              echo "- Warnings: **${WARNINGS}** | Errors: **${ERRORS}**"
+              if [[ "$WARNINGS" -eq 0 ]] && [[ "$ERRORS" -eq 0 ]]; then
+                echo "- ✅ No issues found"
+              else
+                echo "- ⚠️ Warnings: **${WARNINGS}** | Errors: **${ERRORS}**"
+                echo ""
+                echo "#### 🔧 Fix locally"
+                echo '```bash'
+                echo "clang-tidy -p build --fix src/**/*.cpp include/**/*.hpp"
+                echo '```'
+              fi
             else
-              echo "- ⏭️ Skipped"
+              echo "- ⏭️ Skipped (no \`.clang-tidy\` config found)"
             fi
             echo ""
             echo "### cppcheck"
+            echo "> Detects undefined behavior, memory leaks, and portability issues."
             if [[ -f cppcheck-report.xml ]]; then
               ISSUES=$(grep -c '<error ' cppcheck-report.xml 2>/dev/null || echo "0")
-              echo "- Issues found: **${ISSUES}**"
+              if [[ "$ISSUES" -eq 0 ]]; then
+                echo "- ✅ No issues found"
+              else
+                echo "- ⚠️ **${ISSUES}** issues found"
+                echo ""
+                echo "#### 🔧 Run locally"
+                echo '```bash'
+                echo "cppcheck --enable=warning,style,performance,portability src/ include/"
+                echo '```'
+              fi
             else
               echo "- ⏭️ Skipped"
             fi
@@ -359,11 +397,90 @@ jobs:
         if: always()
         run: |
           {
-            echo "## ⚙️ Conan Package"
+            echo "## 📦 C++ Conan Package"
             echo ""
-            echo "| Key | Value |"
-            echo "|-----|-------|"
+            echo "> **What this does:** Creates a Conan package from your library and uploads it to"
+            echo "> a package registry so other projects can consume it as a dependency."
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---------|-------|"
             echo "| Remote | \`${{ inputs.cpp_conan_remote || 'local only' }}\` |"
             # shellcheck disable=SC2193
             echo "| Upload | $(if [[ '${{ github.ref }}' == 'refs/heads/${{ github.event.repository.default_branch }}' ]] || [[ '${{ github.ref }}' == refs/tags/* ]]; then echo '✅ Yes'; else echo '⏭️ Skipped (not main/tag)'; fi) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Documentation — Doxygen (optional)
+  # ──────────────────────────────────────────────────────────
+  cpp-doc:
+    name: "⚙️ C++ Doxygen"
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends doxygen graphviz
+
+      - name: Generate docs
+        run: |
+          if [[ -f Doxyfile ]]; then
+            doxygen Doxyfile
+          else
+            # Auto-generate a Doxyfile targeting src/ and include/
+            cat > Doxyfile.auto << 'EOF'
+          PROJECT_NAME           = "${{ github.event.repository.name }}"
+          OUTPUT_DIRECTORY       = doxygen-output
+          INPUT                  = src include
+          RECURSIVE              = YES
+          EXTRACT_ALL            = YES
+          EXTRACT_PRIVATE        = NO
+          EXTRACT_STATIC         = YES
+          GENERATE_HTML          = YES
+          GENERATE_LATEX         = NO
+          HTML_OUTPUT            = html
+          HAVE_DOT               = YES
+          DOT_IMAGE_FORMAT       = svg
+          INTERACTIVE_SVG        = YES
+          CALL_GRAPH             = YES
+          CALLER_GRAPH           = YES
+          SOURCE_BROWSER         = YES
+          INLINE_SOURCES         = NO
+          QUIET                  = YES
+          WARNINGS               = YES
+          FILE_PATTERNS          = *.cpp *.cxx *.cc *.h *.hpp *.hxx
+          EOF
+            doxygen Doxyfile.auto
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cpp-doxygen
+          path: doxygen-output/html
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 📖 C++ Documentation (Doxygen)"
+            echo ""
+            echo "> Generates API reference documentation from your C++ source code comments."
+            echo "> Use [Doxygen-style comments](https://www.doxygen.nl/manual/docblocks.html) to document your code."
+            echo ""
+            if [[ -d doxygen-output/html ]]; then
+              PAGES=$(find doxygen-output/html -name '*.html' | wc -l)
+              echo "- ✅ Generated **${PAGES}** HTML pages"
+              if [[ -f Doxyfile ]]; then
+                echo "- Config: project \`Doxyfile\`"
+              else
+                echo "- Config: auto-generated (no \`Doxyfile\` found)"
+              fi
+            else
+              echo "- ⚠️ No documentation output — check for Doxygen errors above"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

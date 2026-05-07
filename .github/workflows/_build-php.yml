@@ -36,6 +36,34 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: php-reports, path: php-reports, retention-days: 7 }
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🐘 PHP Test Results"
+            echo ""
+            echo "> **What this does:** Runs your PHPUnit test suite and collects code coverage"
+            echo "> to measure how well your tests exercise the codebase."
+            echo ""
+            if [[ -f php-reports/junit.xml ]]; then
+              TOTAL=$(grep -c '<testcase' php-reports/junit.xml 2>/dev/null || echo "0")
+              FAILURES=$(grep -c '<failure' php-reports/junit.xml 2>/dev/null || echo "0")
+              ERRORS=$(grep -c '<error' php-reports/junit.xml 2>/dev/null || echo "0")
+              FAIL_COUNT=$((FAILURES + ERRORS))
+              if [[ "$FAIL_COUNT" -eq 0 ]]; then
+                echo "- ✅ **${TOTAL}** tests passed"
+              else
+                echo "- ❌ **${FAIL_COUNT}** of **${TOTAL}** tests failed"
+                echo ""
+                echo "#### 🔧 Debug locally"
+                echo '```bash'
+                echo "./vendor/bin/phpunit --verbose"
+                echo '```'
+              fi
+            else
+              echo "- ⚠️ No test results found"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: dorny/test-reporter@v2
         if: >-
           !cancelled() &&

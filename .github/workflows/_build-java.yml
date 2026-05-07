@@ -93,9 +93,29 @@ jobs:
       - name: Check formatting
         run: |
           if [[ "${{ inputs.java_formatter }}" == "spotify" ]]; then
-            mvn ${{ inputs.maven_cli_opts }} com.spotify.fmt:fmt-maven-plugin:check
+            PLUGIN="com.spotify.fmt:fmt-maven-plugin"
+            CHECK_GOAL="check"
+            FIX_GOAL="format"
           else
-            mvn ${{ inputs.maven_cli_opts }} net.revelc.code.formatter:formatter-maven-plugin:validate
+            PLUGIN="net.revelc.code.formatter:formatter-maven-plugin"
+            CHECK_GOAL="validate"
+            FIX_GOAL="format"
+          fi
+          if ! mvn ${{ inputs.maven_cli_opts }} ${PLUGIN}:${CHECK_GOAL} 2>&1 | tee fmt-output.txt; then
+            {
+              echo "## ☕ Java Format Check — ❌ Failed"
+              echo ""
+              echo "> **What this does:** Checks that your Java source files follow the project's"
+              echo "> code style rules. Consistent formatting makes code reviews easier."
+              echo ""
+              echo "### 🔧 Fix locally"
+              echo '```bash'
+              echo "mvn ${PLUGIN}:${FIX_GOAL}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "## ☕ Java Format Check — ✅ Passed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   java-doc:

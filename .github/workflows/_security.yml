@@ -62,11 +62,22 @@ jobs:
 
           if [[ -z "$LANGS" ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "⏭️ No CodeQL-supported languages — skipping SAST" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "⏭️ No CodeQL-supported languages — skipping SAST"
+              echo ""
+              echo "> CodeQL supports: Python, JavaScript/TypeScript, Java/Kotlin, Go, C#, C/C++, Ruby, Swift"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "languages=$LANGS" >> "$GITHUB_OUTPUT"
-            echo "🛡 CodeQL languages: \`$LANGS\`" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "## 🛡 CodeQL SAST"
+              echo ""
+              echo "> **What this does:** Performs deep semantic analysis of your source code to find"
+              echo "> security vulnerabilities like SQL injection, XSS, and insecure data handling."
+              echo ""
+              echo "- Languages: \`$LANGS\`"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: github/codeql-action/init@v3
         if: steps.detect.outputs.skip != 'true'
@@ -216,7 +227,15 @@ jobs:
           FINDINGS=$(grep -c '"level"' semgrep.sarif 2>/dev/null || echo "0")
           {
             echo "## 🔎 Semgrep SAST"
-            echo "- Findings: **${FINDINGS}**"
+            echo ""
+            echo "> **What this does:** Scans your code with community-maintained rules to detect"
+            echo "> security anti-patterns, common bugs, and best practice violations across 30+ languages."
+            echo ""
+            if [[ "$FINDINGS" -eq 0 ]]; then
+              echo "- ✅ No findings"
+            else
+              echo "- ⚠️ **${FINDINGS}** findings detected — review in the Security tab"
+            fi
             echo "- Config: \`auto\` (community + p/default)"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -244,9 +263,24 @@ jobs:
         run: |
           if [[ -f osv-results.json ]]; then
             VULNS=$(grep -c '"id"' osv-results.json 2>/dev/null || echo "0")
-            echo "## 🛡 OSV Scanner — $VULNS known vulnerabilities found" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "## 🛡 OSV Scanner"
+              echo ""
+              echo "> **What this does:** Checks your project's dependencies against Google's Open Source"
+              echo "> Vulnerability database to find known security issues in third-party packages."
+              echo ""
+              if [[ "$VULNS" -eq 0 ]]; then
+                echo "- ✅ No known vulnerabilities detected"
+              else
+                echo "- ⚠️ **${VULNS}** known vulnerabilities found — review and update affected dependencies"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "## 🛡 OSV Scanner — ✅ No vulnerabilities detected" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "## 🛡 OSV Scanner — ✅ Clean"
+              echo ""
+              echo "> Checks dependencies against Google's Open Source Vulnerability database."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # ── License Compliance Check ────────────────────────────
@@ -305,11 +339,15 @@ jobs:
         run: |
           {
             echo "## 📜 License Compliance"
+            echo ""
+            echo "> **What this does:** Scans your project's dependencies for their open-source licenses"
+            echo "> and flags any copyleft licenses (GPL, AGPL, LGPL) that may impose obligations on your project."
+            echo ""
             if [[ -f license-report/licenses.md ]]; then
               TOTAL=$(grep -c '|' license-report/licenses.md 2>/dev/null || echo "0")
               echo "- Dependencies scanned: ~$TOTAL"
               if grep -qiE "GPL|AGPL|LGPL" license-report/licenses.md 2>/dev/null; then
-                echo "- ⚠️ **Copyleft licenses detected** — manual review required"
+                echo "- ⚠️ **Copyleft licenses detected** — review required before commercial distribution"
               else
                 echo "- ✅ No copyleft licenses found"
               fi
