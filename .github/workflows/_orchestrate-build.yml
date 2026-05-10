@@ -137,7 +137,10 @@ jobs:
             echo "has_php=$(check_glob '*phpunit*')"
             echo "has_cmake=$(check_glob 'CMakeLists.txt')"
             echo "has_conan=$(check_any conanfile.py conanfile.txt)"
-            echo "has_terraform=$([[ -n "$(find "${{ inputs.tf_working_dir }}" -maxdepth 1 -name '*.tf' -print -quit 2>/dev/null)" ]] && echo true || echo false)"
+            TF_DIR="${{ inputs.tf_working_dir }}"
+            HAS_TF=$([[ -n "$(find "$TF_DIR" -maxdepth 1 -name '*.tf' \
+              -print -quit 2>/dev/null)" ]] && echo true || echo false)
+            echo "has_terraform=$HAS_TF"
             echo "has_tox=$(check_any tox.ini tox.toml)"
             echo "has_django=$(check_file manage.py)"
             echo "has_mkdocs=$(check_glob 'mkdocs.yml')"
