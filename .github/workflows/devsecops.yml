@@ -291,7 +291,7 @@ jobs:
             echo "has_twig=$(check_glob '*.twig')"
             echo "has_cmake=$(check_glob 'CMakeLists.txt')"
             echo "has_conan=$(check_any conanfile.py conanfile.txt)"
-            echo "has_terraform=$(check_glob '*.tf')"
+            echo "has_terraform=$([[ -n "$(find ${{ inputs.tf_working_dir }} -maxdepth 1 -name '*.tf' -print -quit 2>/dev/null)" ]] && echo true || echo false)"
             echo "has_deploy_intent=$(check_any deploy.yml .codehaven/deploy.yml)"
             echo "has_github_workflows=$([[ -d .github/workflows ]] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
