@@ -37,7 +37,7 @@ jobs:
     if: ${{ !inputs.sast_disabled }}
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Detect CodeQL languages
         id: detect
         run: |
@@ -95,7 +95,7 @@ jobs:
     if: ${{ !inputs.secret_detection_disabled }}
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
       - uses: gitleaks/gitleaks-action@v2
         env:
@@ -107,7 +107,7 @@ jobs:
     if: ${{ !inputs.dependency_scan_disabled }}
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -127,7 +127,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: checkmarx/kics-github-action@v2
         with:
           path: .
@@ -148,7 +148,7 @@ jobs:
       && inputs.sonar_host_url != ''
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
       - uses: actions/download-artifact@v4
         continue-on-error: true
@@ -170,7 +170,7 @@ jobs:
       && inputs.checkmarx_base_url != ''
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: checkmarx-ts/checkmarx-cxflow-github-action@v1.9
         with:
           checkmarx_url: ${{ inputs.checkmarx_base_url }}
@@ -188,7 +188,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with: { python-version: '3.x' }
       - run: pip install sqlfluff
@@ -213,7 +213,7 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run Semgrep
         run: |
           semgrep scan --config auto --sarif --output semgrep.sarif . || true
@@ -246,7 +246,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: google/osv-scanner-action/osv-scanner-action@v2.3.5
         with:
           scan-args: |-
@@ -290,7 +290,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check licenses
         run: |
           # Install license scanning tool
@@ -363,7 +363,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { persist-credentials: false }
       - uses: ossf/scorecard-action@v2.4.0
         with:

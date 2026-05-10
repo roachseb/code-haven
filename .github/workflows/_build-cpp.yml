@@ -38,7 +38,7 @@ jobs:
     name: "⚙️ C++ Build & Test"
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build tools
         run: |
@@ -225,7 +225,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install analysis tools
         run: |
@@ -355,7 +355,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang-format
         run: |
@@ -414,7 +414,7 @@ jobs:
     if: inputs.has_conan == 'true'
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build tools
         run: |
@@ -476,7 +476,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Doxygen
         run: |

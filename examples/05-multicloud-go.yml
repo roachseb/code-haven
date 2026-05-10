@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-aws
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Authenticate to AWS via OIDC
       - uses: code-haven/code-haven/actions/cloud-login@main
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Authenticate to Azure via OIDC
       - uses: code-haven/code-haven/actions/cloud-login@main

@@ -18,7 +18,7 @@ jobs:
     name: "🐘 PHP Test"
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
@@ -83,7 +83,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: shivammathur/setup-php@v2
         with: { php-version: '${{ inputs.php_version }}' }
       - run: composer install --prefer-dist --no-progress

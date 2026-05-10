@@ -16,7 +16,7 @@ jobs:
     name: "🦀 Rust Build & Test"
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ inputs.rust_toolchain }}', components: 'clippy, rustfmt' }
       - uses: Swatinem/rust-cache@v2
@@ -74,7 +74,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ inputs.rust_toolchain }}', components: rustfmt }
       - name: Check formatting
@@ -100,7 +100,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '${{ inputs.rust_toolchain }}', components: clippy }
       - uses: Swatinem/rust-cache@v2
@@ -132,7 +132,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly doc --no-deps

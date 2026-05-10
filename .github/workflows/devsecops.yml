@@ -228,7 +228,7 @@ jobs:
       is_pr: ${{ steps.context.outputs.is_pr }}
       tag_name: ${{ steps.context.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Detect ref context
         id: context

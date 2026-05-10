@@ -77,7 +77,7 @@ jobs:
       cloud: ${{ steps.quick_parse.outputs.cloud }}
       environments_json: ${{ steps.envs.outputs.environments_json }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install yq
         run: |
@@ -170,10 +170,10 @@ jobs:
       matrix:
         environment: ${{ fromJSON(needs.deploy-parse.outputs.environments_json) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.deploy_tf_version }}
 
@@ -342,10 +342,10 @@ jobs:
     runs-on: ${{ inputs.runner }}
     environment: dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.deploy_tf_version }}
 
@@ -457,10 +457,10 @@ jobs:
     runs-on: ${{ inputs.runner }}
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.deploy_tf_version }}
 
@@ -571,10 +571,10 @@ jobs:
     runs-on: ${{ inputs.runner }}
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.deploy_tf_version }}
 

@@ -159,7 +159,7 @@ case "${CLOUD}-${RUNTIME}" in
       --argjson subnet_ids "$SUBNET_IDS" \
       --arg execution_role_arn "$EXECUTION_ROLE_ARN" \
       --arg task_role_arn "$TASK_ROLE_ARN" \
-      '($base | del(.labels)) + {
+      '($base | del(.labels) | .cpu = (.cpu | tonumber) | .memory = (.memory | tonumber)) + {
         region: $region,
         port: $port,
         min_instances: $min_instances,
@@ -186,7 +186,7 @@ case "${CLOUD}-${RUNTIME}" in
       --arg health_check_path "$HEALTH_PATH" \
       --arg managed_environment_id "$MANAGED_ENV_ID" \
       --arg log_analytics_workspace_id "$LOG_ANALYTICS_ID" \
-      '($base | del(.labels)) + {
+      '($base | del(.labels) | .cpu = (.cpu | tonumber)) + {
         resource_group_name: $resource_group_name,
         location: $location,
         port: $port,

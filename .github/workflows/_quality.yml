@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run CodeClimate
         run: |
           curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 \
@@ -47,7 +47,7 @@ jobs:
       !inputs.code_metrics_disabled
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with: { go-version: 'stable' }
       - name: Run SCC
@@ -64,7 +64,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: lycheeverse/lychee-action@v2
         with:
           args: '--verbose --no-progress --exclude-loopback --accept 200,403,401 **/*.md'
@@ -76,7 +76,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ${{ inputs.dockerfile_path }}
@@ -93,7 +93,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run actionlint
         uses: raven-actions/actionlint@v2
         with:

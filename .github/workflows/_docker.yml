@@ -24,7 +24,7 @@ jobs:
       image_tag: ${{ steps.meta.outputs.tags }}
       image_digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ── Pull build artifacts into Docker context ────────
       - name: Check for docker-input artifacts

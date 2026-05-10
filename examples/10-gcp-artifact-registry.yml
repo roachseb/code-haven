@@ -47,7 +47,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feature/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Authenticate to GCP via Workload Identity Federation
       - uses: code-haven/code-haven/actions/cloud-login@main
@@ -106,7 +106,7 @@ jobs:
   #   runs-on: ubuntu-latest
   #   environment: production-k8s
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #     - uses: code-haven/code-haven/actions/cloud-login@main
   #       with:
   #         provider: gcp
