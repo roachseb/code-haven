@@ -1,0 +1,19 @@
+# ── Release ────────────────────────────────────────────────────
+# Creates GitHub Releases with changelog when a tag is pushed.
+name: "\U0001F3F7️ Release"
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  release:
+    uses: roachseb/code-haven/.github/workflows/_orchestrate-release.yml@main
+    secrets: inherit
+    # with:
+    #   docker_registry: 'ghcr.io'

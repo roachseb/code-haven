@@ -1,0 +1,49 @@
+# ── Code Haven: Pages Orchestrator ─────────────────────────────
+# Deploys documentation to GitHub Pages (reports, coverage, mkdocs, javadoc).
+# Runs after other workflows complete to aggregate artifacts.
+name: "\U0001F4D6 Pages"
+
+on:
+  workflow_call:
+    inputs:
+      runner:         { type: string,  default: 'ubuntu-latest' }
+      pages_disabled: { type: boolean, default: false }
+
+jobs:
+  detect:
+    name: "\U0001F50D Detect"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      is_default_branch: ${{ steps.context.outputs.is_default_branch }}
+      is_tag:            ${{ steps.context.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect ref context
+        id: context
+        run: |
+          REF="$GITHUB_REF"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          [[ -z "$DEFAULT_BRANCH" ]] && DEFAULT_BRANCH="main"
+
+          IS_DEFAULT_BRANCH="false"; IS_TAG="false"
+          if [[ "$REF" == refs/tags/* ]]; then
+            IS_TAG="true"
+          elif [[ "$REF" == "refs/heads/$DEFAULT_BRANCH" ]]; then
+            IS_DEFAULT_BRANCH="true"
+          fi
+
+          {
+            echo "is_default_branch=$IS_DEFAULT_BRANCH"
+            echo "is_tag=$IS_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+  pages:
+    needs: detect
+    if: "!inputs.pages_disabled"
+    uses: ./.github/workflows/_pages.yml
+    with:
+      runner: ${{ inputs.runner }}
+      pages_disabled: ${{ inputs.pages_disabled }}
+      is_default_branch: ${{ needs.detect.outputs.is_default_branch }}
+      is_tag: ${{ needs.detect.outputs.is_tag }}
+    secrets: inherit

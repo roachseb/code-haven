@@ -5,7 +5,12 @@ your `.github/workflows/ci.yml` to get started.
 
 !!! tip "Start minimal"
     Example 1 (zero-config) works for most projects. Only add configuration
-    when you need to override defaults or disable unused stacks.
+    when you need to override defaults.
+
+!!! note "No disable flags needed"
+    Code Haven auto-detects your stack. If your project doesn't have `pom.xml`,
+    Java won't run. You only need `_disabled` flags to override a false detection
+    (e.g., a `package.json` that exists only for tooling, not a Node app).
 
 ---
 
@@ -53,12 +58,6 @@ jobs:
       java_formatter: 'spotify'
       sonar_host_url: 'https://sonarqube.example.com'
       sonar_project_key: 'my-spring-boot-app'
-      npm_disabled: true
-      python_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 ```
 
@@ -82,12 +81,6 @@ jobs:
     with:
       node_version: '20'
       cypress_browsers: 'chrome,firefox'
-      maven_disabled: true
-      python_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 ```
 
@@ -112,11 +105,6 @@ jobs:
       python_version: '3.12'
       helm_chart_path: 'deploy/helm'
       helm_values_files: 'values.yaml,values-prod.yaml'
-      maven_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 ```
 
@@ -136,12 +124,6 @@ jobs:
     with:
       golang_version: '1.22'
       docker_registry: 'ghcr.io'
-      maven_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 ```
 
@@ -165,12 +147,6 @@ jobs:
     with:
       rust_toolchain: 'stable'
       hurl_extra_args: '--variable host=http://localhost:8080'
-      maven_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      golang_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 ```
 
@@ -196,12 +172,6 @@ jobs:
       checkmarx_base_url: 'https://checkmarx.example.com'
       sqlfluff_dialect: 'tsql'
       sonar_host_url: 'https://sonarqube.example.com'
-      maven_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      php_disabled: true
     secrets: inherit
 ```
 
@@ -228,14 +198,6 @@ jobs:
       cpp_standard: '20'
       cpp_coverage_enabled: true
       cpp_conan_remote: ${{ vars.CONAN_REMOTE_URL }}
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 ```
 
@@ -261,13 +223,6 @@ jobs:
       cpp_standard: '20'
       cpp_coverage_enabled: true
       docker_registry: 'ghcr.io'
-      maven_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 ```
 
@@ -291,12 +246,6 @@ jobs:
     with:
       python_version: '3.12'
       docker_registry: 'ghcr.io'
-      maven_disabled: true
-      npm_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 ```
 
@@ -322,13 +271,6 @@ jobs:
       cpp_standard: '20'
       cpp_conan_remote: ${{ vars.CONAN_REMOTE_URL }}
       docker_registry: 'ghcr.io'
-      maven_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 ```
 
@@ -357,13 +299,6 @@ jobs:
       maven_build_cmd: 'install'
       java_doc_enabled: true
       docker_registry: 'ghcr.io'
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
-      cpp_disabled: true
     secrets: inherit
 
   native:
@@ -403,14 +338,6 @@ jobs:
       node_build_args: 'run build'
       node_test_args: 'run test'
       docker_disabled: true      # Per-service Docker below
-      maven_disabled: true
-      gradle_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
-      cpp_disabled: true
     secrets: inherit
 
   detect-changes:

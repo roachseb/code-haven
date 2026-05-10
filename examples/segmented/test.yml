@@ -1,0 +1,22 @@
+# ── Test (E2E) ─────────────────────────────────────────────────
+# Cypress, Playwright, and Hurl end-to-end tests.
+# Only include this if your project has e2e test configurations.
+name: "\U0001F9EA Test"
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'release/**', 'hotfix/**']
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  test:
+    uses: roachseb/code-haven/.github/workflows/_orchestrate-test.yml@main
+    secrets: inherit
+    # with:
+    #   cypress_browsers: 'chrome,firefox'
+    #   hurl_extra_args: '--variable host=http://localhost:8080'

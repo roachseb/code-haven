@@ -27,14 +27,6 @@ jobs:
     with:
       golang_version: '1.22'
       docker_registry: 'ghcr.io'
-      # Focus on Go only
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 
   # ── Deploy to AWS EKS ──────────────────────────────────────

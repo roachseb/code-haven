@@ -1,0 +1,24 @@
+# ── Build ──────────────────────────────────────────────────────
+# Auto-detects your stack and runs the appropriate build + unit tests.
+name: "\U0001F3D7️ Build"
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'release/**', 'hotfix/**']
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  build:
+    uses: roachseb/code-haven/.github/workflows/_orchestrate-build.yml@main
+    secrets: inherit
+    # with:
+    #   java_version: '21'
+    #   node_version: 'lts/*'
+    #   python_version: '3.x'
+    #   cpp_standard: '20'

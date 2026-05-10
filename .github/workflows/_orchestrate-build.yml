@@ -1,0 +1,293 @@
+# ── Code Haven: Build Orchestrator ─────────────────────────────
+# Detects the project stack and runs the appropriate build pipeline.
+# Use this for segmented visibility in GitHub Actions.
+name: "\U0001F3D7️ Build"
+
+on:
+  workflow_call:
+    inputs:
+      # ─── Global ───
+      runner:             { type: string,  default: 'ubuntu-latest' }
+      debug:              { type: boolean, default: false }
+      # ─── Java ───
+      java_version:       { type: string,  default: '21' }
+      java_distribution:  { type: string,  default: 'temurin' }
+      maven_cli_opts:     { type: string,  default: '--batch-mode --errors --fail-at-end --show-version' }
+      maven_build_cmd:    { type: string,  default: 'install' }
+      java_doc_enabled:   { type: boolean, default: false }
+      java_formatter:     { type: string,  default: 'revelc' }
+      gradle_build_cmd:   { type: string,  default: 'build' }
+      # ─── Node ───
+      node_version:       { type: string,  default: 'lts/*' }
+      node_build_args:    { type: string,  default: 'run build' }
+      node_test_args:     { type: string,  default: 'run test' }
+      # ─── Python ───
+      python_version:     { type: string,  default: '3.x' }
+      # ─── Go ───
+      golang_version:     { type: string,  default: 'stable' }
+      # ─── Rust ───
+      rust_toolchain:     { type: string,  default: 'stable' }
+      # ─── .NET ───
+      dotnet_version:     { type: string,  default: '8.0.x' }
+      # ─── PHP ───
+      php_version:        { type: string,  default: '8.3' }
+      php_extensions:     { type: string,  default: 'mbstring, xml, xdebug' }
+      # ─── C/C++ ───
+      cpp_standard:       { type: string,  default: '17' }
+      cpp_build_type:     { type: string,  default: 'Release' }
+      cpp_compiler:       { type: string,  default: 'gcc' }
+      cpp_compiler_version: { type: string, default: '' }
+      cpp_conan_remote:   { type: string,  default: '' }
+      cpp_coverage_enabled: { type: boolean, default: false }
+      # ─── Terraform ───
+      terraform_disabled: { type: boolean, default: false }
+      tf_version:         { type: string,  default: '1.9' }
+      tf_tool:            { type: string,  default: 'terraform' }
+      tf_cloud_provider:  { type: string,  default: '' }
+      tf_working_dir:     { type: string,  default: '.' }
+      tf_environments:    { type: string,  default: 'dev,staging,prod' }
+      tf_auto_apply_dev:  { type: boolean, default: true }
+      tf_auto_apply_staging: { type: boolean, default: false }
+      tf_auto_apply_prod: { type: boolean, default: false }
+      tf_infracost_enabled: { type: boolean, default: false }
+    secrets:
+      SONAR_TOKEN:                          { required: false }
+      CONAN_LOGIN_USERNAME:                 { required: false }
+      CONAN_PASSWORD:                       { required: false }
+      CC_TEST_REPORTER_ID:                  { required: false }
+      TF_AWS_ROLE_ARN:                      { required: false }
+      TF_AWS_REGION:                        { required: false }
+      TF_AZURE_CLIENT_ID:                   { required: false }
+      TF_AZURE_CLIENT_SECRET:               { required: false }
+      TF_AZURE_TENANT_ID:                   { required: false }
+      TF_AZURE_SUBSCRIPTION_ID:             { required: false }
+      TF_GCP_WORKLOAD_IDENTITY_PROVIDER:    { required: false }
+      TF_GCP_SERVICE_ACCOUNT:               { required: false }
+      INFRACOST_API_KEY:                    { required: false }
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  detect:
+    name: "\U0001F50D Detect Stack"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      has_pom:          ${{ steps.check.outputs.has_pom }}
+      has_gradle:       ${{ steps.check.outputs.has_gradle }}
+      has_package_json: ${{ steps.check.outputs.has_package_json }}
+      has_angular:      ${{ steps.check.outputs.has_angular }}
+      has_cargo:        ${{ steps.check.outputs.has_cargo }}
+      has_go:           ${{ steps.check.outputs.has_go }}
+      has_python:       ${{ steps.check.outputs.has_python }}
+      has_dotnet:       ${{ steps.check.outputs.has_dotnet }}
+      has_php:          ${{ steps.check.outputs.has_php }}
+      has_cmake:        ${{ steps.check.outputs.has_cmake }}
+      has_conan:        ${{ steps.check.outputs.has_conan }}
+      has_terraform:    ${{ steps.check.outputs.has_terraform }}
+      has_tox:          ${{ steps.check.outputs.has_tox }}
+      has_django:       ${{ steps.check.outputs.has_django }}
+      has_mkdocs:       ${{ steps.check.outputs.has_mkdocs }}
+      has_twig:         ${{ steps.check.outputs.has_twig }}
+      package_manager:  ${{ steps.check.outputs.package_manager }}
+      is_default_branch: ${{ steps.context.outputs.is_default_branch }}
+      is_tag:           ${{ steps.context.outputs.is_tag }}
+      is_pr:            ${{ steps.context.outputs.is_pr }}
+      tag_name:         ${{ steps.context.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Detect ref context
+        id: context
+        run: |
+          REF="$GITHUB_REF"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          [[ -z "$DEFAULT_BRANCH" ]] && DEFAULT_BRANCH="main"
+
+          IS_DEFAULT_BRANCH="false"; IS_TAG="false"; IS_PR="false"; TAG_NAME=""
+          if [[ "$REF" == refs/tags/* ]]; then
+            IS_TAG="true"; TAG_NAME="${REF#refs/tags/}"
+          elif [[ "$REF" == refs/pull/* ]]; then
+            IS_PR="true"
+          elif [[ "$REF" == "refs/heads/$DEFAULT_BRANCH" ]]; then
+            IS_DEFAULT_BRANCH="true"
+          fi
+
+          {
+            echo "is_default_branch=$IS_DEFAULT_BRANCH"
+            echo "is_tag=$IS_TAG"
+            echo "is_pr=$IS_PR"
+            echo "tag_name=$TAG_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect project files
+        id: check
+        run: |
+          check_glob() { [[ -n "$(find . -maxdepth 4 -name "$1" -print -quit 2>/dev/null)" ]] && echo "true" || echo "false"; }
+          check_file() { [[ -f "$1" ]] && echo "true" || echo "false"; }
+          check_any()  { for f in "$@"; do [[ -f "$f" ]] && echo "true" && return; done; echo "false"; }
+
+          {
+            echo "has_pom=$(check_file pom.xml)"
+            echo "has_gradle=$(check_any build.gradle build.gradle.kts)"
+            echo "has_package_json=$(check_file package.json)"
+            echo "has_angular=$(check_file angular.json)"
+            echo "has_cargo=$(check_file Cargo.lock)"
+            echo "has_go=$(check_glob '*.go')"
+            echo "has_python=$(check_any setup.py pyproject.toml)"
+            echo "has_dotnet=$([[ -n "$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.csproj' \) -print -quit)" ]] && echo true || echo false)"
+            echo "has_php=$(check_glob '*phpunit*')"
+            echo "has_cmake=$(check_glob 'CMakeLists.txt')"
+            echo "has_conan=$(check_any conanfile.py conanfile.txt)"
+            echo "has_terraform=$([[ -n "$(find ${{ inputs.tf_working_dir }} -maxdepth 1 -name '*.tf' -print -quit 2>/dev/null)" ]] && echo true || echo false)"
+            echo "has_tox=$(check_any tox.ini tox.toml)"
+            echo "has_django=$(check_file manage.py)"
+            echo "has_mkdocs=$(check_glob 'mkdocs.yml')"
+            echo "has_twig=$(check_glob '*.twig')"
+          } >> "$GITHUB_OUTPUT"
+
+          # Detect Node package manager
+          if [[ -f pnpm-lock.yaml ]]; then PM=pnpm
+          elif [[ -f yarn.lock ]]; then PM=yarn
+          else PM=npm; fi
+          echo "package_manager=$PM" >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────────────────────────────────────────────
+  java:
+    needs: detect
+    if: needs.detect.outputs.has_pom == 'true' || needs.detect.outputs.has_gradle == 'true'
+    uses: ./.github/workflows/_build-java.yml
+    with:
+      runner: ${{ inputs.runner }}
+      has_pom: ${{ needs.detect.outputs.has_pom }}
+      has_gradle: ${{ needs.detect.outputs.has_gradle }}
+      maven_disabled: false
+      gradle_disabled: false
+      java_version: ${{ inputs.java_version }}
+      java_distribution: ${{ inputs.java_distribution }}
+      maven_cli_opts: ${{ inputs.maven_cli_opts }}
+      maven_build_cmd: ${{ inputs.maven_build_cmd }}
+      java_formatter: ${{ inputs.java_formatter }}
+      gradle_build_cmd: ${{ inputs.gradle_build_cmd }}
+      java_doc_enabled: ${{ inputs.java_doc_enabled }}
+    secrets: inherit
+
+  node:
+    needs: detect
+    if: needs.detect.outputs.has_package_json == 'true'
+    uses: ./.github/workflows/_build-node.yml
+    with:
+      runner: ${{ inputs.runner }}
+      has_angular: ${{ needs.detect.outputs.has_angular }}
+      npm_disabled: false
+      angular_disabled: false
+      node_version: ${{ inputs.node_version }}
+      node_build_args: ${{ inputs.node_build_args }}
+      node_test_args: ${{ inputs.node_test_args }}
+      package_manager: ${{ needs.detect.outputs.package_manager }}
+    secrets: inherit
+
+  python:
+    needs: detect
+    if: >-
+      needs.detect.outputs.has_python == 'true' ||
+      needs.detect.outputs.has_django == 'true' ||
+      needs.detect.outputs.has_mkdocs == 'true' ||
+      needs.detect.outputs.has_tox == 'true'
+    uses: ./.github/workflows/_build-python.yml
+    with:
+      runner: ${{ inputs.runner }}
+      has_python: ${{ needs.detect.outputs.has_python }}
+      has_tox: ${{ needs.detect.outputs.has_tox }}
+      has_django: ${{ needs.detect.outputs.has_django }}
+      has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}
+      python_disabled: false
+      python_version: ${{ inputs.python_version }}
+    secrets: inherit
+
+  go:
+    needs: detect
+    if: needs.detect.outputs.has_go == 'true'
+    uses: ./.github/workflows/_build-go.yml
+    with:
+      runner: ${{ inputs.runner }}
+      golang_disabled: false
+      golang_version: ${{ inputs.golang_version }}
+    secrets: inherit
+
+  rust:
+    needs: detect
+    if: needs.detect.outputs.has_cargo == 'true'
+    uses: ./.github/workflows/_build-rust.yml
+    with:
+      runner: ${{ inputs.runner }}
+      rust_disabled: false
+      rust_toolchain: ${{ inputs.rust_toolchain }}
+    secrets: inherit
+
+  dotnet:
+    needs: detect
+    if: needs.detect.outputs.has_dotnet == 'true'
+    uses: ./.github/workflows/_build-dotnet.yml
+    with:
+      runner: ${{ inputs.runner }}
+      dotnet_disabled: false
+      dotnet_version: ${{ inputs.dotnet_version }}
+    secrets: inherit
+
+  php:
+    needs: detect
+    if: needs.detect.outputs.has_php == 'true'
+    uses: ./.github/workflows/_build-php.yml
+    with:
+      runner: ${{ inputs.runner }}
+      php_disabled: false
+      php_version: ${{ inputs.php_version }}
+      php_extensions: ${{ inputs.php_extensions }}
+      has_twig: ${{ needs.detect.outputs.has_twig }}
+    secrets: inherit
+
+  cpp:
+    needs: detect
+    if: needs.detect.outputs.has_cmake == 'true'
+    uses: ./.github/workflows/_build-cpp.yml
+    with:
+      runner: ${{ inputs.runner }}
+      cpp_disabled: false
+      cpp_standard: ${{ inputs.cpp_standard }}
+      cpp_build_type: ${{ inputs.cpp_build_type }}
+      cpp_compiler: ${{ inputs.cpp_compiler }}
+      cpp_compiler_version: ${{ inputs.cpp_compiler_version }}
+      cpp_conan_remote: ${{ inputs.cpp_conan_remote }}
+      cpp_coverage_enabled: ${{ inputs.cpp_coverage_enabled }}
+      has_conan: ${{ needs.detect.outputs.has_conan }}
+    secrets: inherit
+
+  terraform:
+    needs: detect
+    if: needs.detect.outputs.has_terraform == 'true' && !inputs.terraform_disabled
+    uses: ./.github/workflows/_build-terraform.yml
+    with:
+      runner: ${{ inputs.runner }}
+      tf_disabled: ${{ inputs.terraform_disabled }}
+      tf_version: ${{ inputs.tf_version }}
+      tf_tool: ${{ inputs.tf_tool }}
+      tf_cloud_provider: ${{ inputs.tf_cloud_provider }}
+      tf_working_dir: ${{ inputs.tf_working_dir }}
+      tf_environments: ${{ inputs.tf_environments }}
+      tf_auto_apply_dev: ${{ inputs.tf_auto_apply_dev }}
+      tf_auto_apply_staging: ${{ inputs.tf_auto_apply_staging }}
+      tf_auto_apply_prod: ${{ inputs.tf_auto_apply_prod }}
+      tf_infracost_enabled: ${{ inputs.tf_infracost_enabled }}
+      has_terraform: ${{ needs.detect.outputs.has_terraform }}
+      is_default_branch: ${{ needs.detect.outputs.is_default_branch }}
+      is_tag: ${{ needs.detect.outputs.is_tag }}
+      is_pr: ${{ needs.detect.outputs.is_pr }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.TF_AWS_ROLE_ARN }}
+      AWS_REGION: ${{ secrets.TF_AWS_REGION }}
+      AZURE_CLIENT_ID: ${{ secrets.TF_AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.TF_AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.TF_AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.TF_AZURE_SUBSCRIPTION_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.TF_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets.TF_GCP_SERVICE_ACCOUNT }}
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}

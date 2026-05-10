@@ -1,0 +1,53 @@
+# ── Code Haven: Quality Orchestrator ───────────────────────────
+# Runs code quality checks: linting, metrics, link validation, Hadolint, actionlint.
+# Independent of build — operates directly on source code.
+name: "\U0001F4CA Quality"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                 { type: string,  default: 'ubuntu-latest' }
+      # ─── Quality Toggles ───
+      code_quality_disabled:  { type: boolean, default: false }
+      code_metrics_disabled:  { type: boolean, default: false }
+      links_check_disabled:   { type: boolean, default: false }
+      hadolint_disabled:      { type: boolean, default: false }
+      actionlint_disabled:    { type: boolean, default: false }
+      # ─── Config ───
+      dockerfile_path:        { type: string,  default: 'Dockerfile' }
+
+jobs:
+  detect:
+    name: "\U0001F50D Detect"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      has_mkdocs:           ${{ steps.check.outputs.has_mkdocs }}
+      has_dockerfile:       ${{ steps.check.outputs.has_dockerfile }}
+      has_github_workflows: ${{ steps.check.outputs.has_github_workflows }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect quality-relevant files
+        id: check
+        run: |
+          check_glob() { [[ -n "$(find . -maxdepth 4 -name "$1" -print -quit 2>/dev/null)" ]] && echo "true" || echo "false"; }
+          {
+            echo "has_mkdocs=$(check_glob 'mkdocs.yml')"
+            echo "has_dockerfile=$([[ -f ${{ inputs.dockerfile_path }} ]] && echo true || echo false)"
+            echo "has_github_workflows=$([[ -d .github/workflows ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+  quality:
+    needs: detect
+    uses: ./.github/workflows/_quality.yml
+    with:
+      runner: ${{ inputs.runner }}
+      has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}
+      has_dockerfile: ${{ needs.detect.outputs.has_dockerfile }}
+      has_github_workflows: ${{ needs.detect.outputs.has_github_workflows }}
+      code_quality_disabled: ${{ inputs.code_quality_disabled }}
+      code_metrics_disabled: ${{ inputs.code_metrics_disabled }}
+      links_check_disabled: ${{ inputs.links_check_disabled }}
+      hadolint_disabled: ${{ inputs.hadolint_disabled }}
+      actionlint_disabled: ${{ inputs.actionlint_disabled }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
+    secrets: inherit

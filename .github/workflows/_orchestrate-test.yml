@@ -1,0 +1,59 @@
+# ── Code Haven: Test Orchestrator ──────────────────────────────
+# Runs end-to-end tests: Cypress, Playwright, Hurl.
+# Only triggers if test configuration files are detected.
+name: "\U0001F9EA Test"
+
+on:
+  workflow_call:
+    inputs:
+      runner:              { type: string,  default: 'ubuntu-latest' }
+      # ─── Test Toggles ───
+      cypress_disabled:    { type: boolean, default: false }
+      playwright_disabled: { type: boolean, default: false }
+      hurl_disabled:       { type: boolean, default: false }
+      # ─── Config ───
+      node_version:        { type: string,  default: 'lts/*' }
+      cypress_browsers:    { type: string,  default: 'chrome' }
+      hurl_extra_args:     { type: string,  default: '' }
+    secrets:
+      CYPRESS_RECORD_KEY: { required: false }
+
+jobs:
+  detect:
+    name: "\U0001F50D Detect"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      has_cypress:    ${{ steps.check.outputs.has_cypress }}
+      has_playwright: ${{ steps.check.outputs.has_playwright }}
+      has_hurl:       ${{ steps.check.outputs.has_hurl }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect test frameworks
+        id: check
+        run: |
+          check_glob() { [[ -n "$(find . -maxdepth 4 -name "$1" -print -quit 2>/dev/null)" ]] && echo "true" || echo "false"; }
+          {
+            echo "has_cypress=$(check_glob 'cypress.config.*')"
+            echo "has_playwright=$(check_glob 'playwright.config.*')"
+            echo "has_hurl=$(check_glob '*.hurl')"
+          } >> "$GITHUB_OUTPUT"
+
+  e2e:
+    needs: detect
+    if: >-
+      needs.detect.outputs.has_cypress == 'true' ||
+      needs.detect.outputs.has_playwright == 'true' ||
+      needs.detect.outputs.has_hurl == 'true'
+    uses: ./.github/workflows/_test-e2e.yml
+    with:
+      runner: ${{ inputs.runner }}
+      has_cypress: ${{ needs.detect.outputs.has_cypress }}
+      has_playwright: ${{ needs.detect.outputs.has_playwright }}
+      has_hurl: ${{ needs.detect.outputs.has_hurl }}
+      cypress_disabled: ${{ inputs.cypress_disabled }}
+      playwright_disabled: ${{ inputs.playwright_disabled }}
+      hurl_disabled: ${{ inputs.hurl_disabled }}
+      node_version: ${{ inputs.node_version }}
+      cypress_browsers: ${{ inputs.cypress_browsers }}
+      hurl_extra_args: ${{ inputs.hurl_extra_args }}
+    secrets: inherit

@@ -1,0 +1,68 @@
+# ── Code Haven: Security Orchestrator ──────────────────────────
+# Runs all security scanning: SAST, secrets, dependencies, IaC, Sonar, Checkmarx.
+# Independent of build — operates directly on source code.
+name: "\U0001F512 Security"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                    { type: string,  default: 'ubuntu-latest' }
+      # ─── Security Toggles ───
+      sast_disabled:             { type: boolean, default: false }
+      secret_detection_disabled: { type: boolean, default: false }
+      dependency_scan_disabled:  { type: boolean, default: false }
+      iac_scan_disabled:         { type: boolean, default: false }
+      sonar_disabled:            { type: boolean, default: false }
+      checkmarx_disabled:        { type: boolean, default: false }
+      sqlfluff_disabled:         { type: boolean, default: false }
+      semgrep_disabled:          { type: boolean, default: false }
+      osv_disabled:              { type: boolean, default: false }
+      license_check_disabled:    { type: boolean, default: false }
+      scorecard_disabled:        { type: boolean, default: false }
+      # ─── Security Config ───
+      sonar_host_url:            { type: string,  default: '' }
+      sonar_project_key:         { type: string,  default: '' }
+      checkmarx_base_url:        { type: string,  default: '' }
+      sqlfluff_dialect:          { type: string,  default: 'ansi' }
+    secrets:
+      SONAR_TOKEN:       { required: false }
+      CHECKMARX_TOKEN:   { required: false }
+      CHECKMARX_USERNAME: { required: false }
+      CHECKMARX_PASSWORD: { required: false }
+
+jobs:
+  detect:
+    name: "\U0001F50D Detect"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      has_sql: ${{ steps.check.outputs.has_sql }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect security-relevant files
+        id: check
+        run: |
+          check_glob() { [[ -n "$(find . -maxdepth 4 -name "$1" -print -quit 2>/dev/null)" ]] && echo "true" || echo "false"; }
+          echo "has_sql=$(check_glob '*.sql')" >> "$GITHUB_OUTPUT"
+
+  security:
+    needs: detect
+    uses: ./.github/workflows/_security.yml
+    with:
+      runner: ${{ inputs.runner }}
+      has_sql: ${{ needs.detect.outputs.has_sql }}
+      sast_disabled: ${{ inputs.sast_disabled }}
+      secret_detection_disabled: ${{ inputs.secret_detection_disabled }}
+      dependency_scan_disabled: ${{ inputs.dependency_scan_disabled }}
+      iac_scan_disabled: ${{ inputs.iac_scan_disabled }}
+      sonar_disabled: ${{ inputs.sonar_disabled }}
+      checkmarx_disabled: ${{ inputs.checkmarx_disabled }}
+      sqlfluff_disabled: ${{ inputs.sqlfluff_disabled }}
+      sonar_host_url: ${{ inputs.sonar_host_url }}
+      sonar_project_key: ${{ inputs.sonar_project_key }}
+      checkmarx_base_url: ${{ inputs.checkmarx_base_url }}
+      sqlfluff_dialect: ${{ inputs.sqlfluff_dialect }}
+      semgrep_disabled: ${{ inputs.semgrep_disabled }}
+      osv_disabled: ${{ inputs.osv_disabled }}
+      license_check_disabled: ${{ inputs.license_check_disabled }}
+      scorecard_disabled: ${{ inputs.scorecard_disabled }}
+    secrets: inherit

@@ -1,0 +1,107 @@
+# ── Code Haven: Release Orchestrator ───────────────────────────
+# Creates GitHub Releases with auto-generated changelog and publishes artifacts.
+# Only triggers on tags — designed with on.push.tags in consumer workflow.
+name: "\U0001F3F7️ Release"
+
+on:
+  workflow_call:
+    inputs:
+      runner:            { type: string,  default: 'ubuntu-latest' }
+      # ─── Language versions (for release artifact building) ───
+      java_version:      { type: string,  default: '21' }
+      java_distribution: { type: string,  default: 'temurin' }
+      node_version:      { type: string,  default: 'lts/*' }
+      python_version:    { type: string,  default: '3.x' }
+      golang_version:    { type: string,  default: 'stable' }
+      rust_toolchain:    { type: string,  default: 'stable' }
+      dotnet_version:    { type: string,  default: '8.0.x' }
+      # ─── C/C++ ───
+      cpp_standard:      { type: string,  default: '17' }
+      cpp_build_type:    { type: string,  default: 'Release' }
+      cpp_conan_remote:  { type: string,  default: '' }
+      # ─── Docker ───
+      dockerfile_path:   { type: string,  default: 'Dockerfile' }
+      docker_context:    { type: string,  default: '.' }
+      docker_registry:   { type: string,  default: 'ghcr.io' }
+    secrets:
+      CONAN_LOGIN_USERNAME: { required: false }
+      CONAN_PASSWORD:       { required: false }
+
+jobs:
+  detect:
+    name: "\U0001F50D Detect"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      tag_name:         ${{ steps.context.outputs.tag_name }}
+      has_pom:          ${{ steps.check.outputs.has_pom }}
+      has_gradle:       ${{ steps.check.outputs.has_gradle }}
+      has_package_json: ${{ steps.check.outputs.has_package_json }}
+      has_python:       ${{ steps.check.outputs.has_python }}
+      has_cargo:        ${{ steps.check.outputs.has_cargo }}
+      has_go:           ${{ steps.check.outputs.has_go }}
+      has_dotnet:       ${{ steps.check.outputs.has_dotnet }}
+      has_cmake:        ${{ steps.check.outputs.has_cmake }}
+      has_conan:        ${{ steps.check.outputs.has_conan }}
+      has_dockerfile:   ${{ steps.check.outputs.has_dockerfile }}
+      has_mkdocs:       ${{ steps.check.outputs.has_mkdocs }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Extract tag
+        id: context
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Detect project files
+        id: check
+        run: |
+          check_glob() { [[ -n "$(find . -maxdepth 4 -name "$1" -print -quit 2>/dev/null)" ]] && echo "true" || echo "false"; }
+          check_file() { [[ -f "$1" ]] && echo "true" || echo "false"; }
+          check_any()  { for f in "$@"; do [[ -f "$f" ]] && echo "true" && return; done; echo "false"; }
+
+          {
+            echo "has_pom=$(check_file pom.xml)"
+            echo "has_gradle=$(check_any build.gradle build.gradle.kts)"
+            echo "has_package_json=$(check_file package.json)"
+            echo "has_python=$(check_any setup.py pyproject.toml)"
+            echo "has_cargo=$(check_file Cargo.lock)"
+            echo "has_go=$(check_glob '*.go')"
+            echo "has_dotnet=$([[ -n "$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.csproj' \) -print -quit)" ]] && echo true || echo false)"
+            echo "has_cmake=$(check_glob 'CMakeLists.txt')"
+            echo "has_conan=$(check_any conanfile.py conanfile.txt)"
+            echo "has_dockerfile=$(check_file ${{ inputs.dockerfile_path }})"
+            echo "has_mkdocs=$(check_glob 'mkdocs.yml')"
+          } >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: detect
+    uses: ./.github/workflows/_release.yml
+    with:
+      runner: ${{ inputs.runner }}
+      tag_name: ${{ needs.detect.outputs.tag_name }}
+      has_pom: ${{ needs.detect.outputs.has_pom }}
+      has_gradle: ${{ needs.detect.outputs.has_gradle }}
+      has_package_json: ${{ needs.detect.outputs.has_package_json }}
+      has_python: ${{ needs.detect.outputs.has_python }}
+      has_cargo: ${{ needs.detect.outputs.has_cargo }}
+      has_go: ${{ needs.detect.outputs.has_go }}
+      has_dotnet: ${{ needs.detect.outputs.has_dotnet }}
+      has_cmake: ${{ needs.detect.outputs.has_cmake }}
+      has_conan: ${{ needs.detect.outputs.has_conan }}
+      has_dockerfile: ${{ needs.detect.outputs.has_dockerfile }}
+      has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}
+      java_version: ${{ inputs.java_version }}
+      java_distribution: ${{ inputs.java_distribution }}
+      node_version: ${{ inputs.node_version }}
+      python_version: ${{ inputs.python_version }}
+      golang_version: ${{ inputs.golang_version }}
+      rust_toolchain: ${{ inputs.rust_toolchain }}
+      dotnet_version: ${{ inputs.dotnet_version }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
+      docker_context: ${{ inputs.docker_context }}
+      docker_registry: ${{ inputs.docker_registry }}
+      cpp_standard: ${{ inputs.cpp_standard }}
+      cpp_build_type: ${{ inputs.cpp_build_type }}
+      cpp_conan_remote: ${{ inputs.cpp_conan_remote }}
+    secrets: inherit

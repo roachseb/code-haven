@@ -34,11 +34,4 @@ jobs:
       sonar_host_url: 'https://sonarqube.example.com'
       sonar_project_key: 'my-spring-boot-app'
       docker_registry: 'ghcr.io'
-      # Disable things we don't need
-      npm_disabled: true
-      python_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit

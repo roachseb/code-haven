@@ -1,0 +1,22 @@
+# ── Security ───────────────────────────────────────────────────
+# SAST, secret detection, dependency scanning, IaC scanning.
+name: "\U0001F512 Security"
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'release/**', 'hotfix/**']
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  security:
+    uses: roachseb/code-haven/.github/workflows/_orchestrate-security.yml@main
+    secrets: inherit
+    # with:
+    #   sonar_host_url: 'https://sonarqube.example.com'
+    #   sonar_project_key: 'my-project'

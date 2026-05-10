@@ -84,22 +84,21 @@ Only configure what you need to change. Everything has sensible defaults.
         secrets: inherit
     ```
 
-=== "Disable unused stacks"
+=== "Force-disable a detected stack"
 
     ```yaml
     jobs:
       ci:
         uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
         with:
-          rust_disabled: true
-          php_disabled: true
-          golang_disabled: true
+          npm_disabled: true   # I have package.json but don't want Node CI
         secrets: inherit
     ```
 
-    !!! tip "Save runner minutes"
-        Disabling stacks skips detection for those languages entirely,
-        saving CI minutes on every run.
+    !!! note "You rarely need disable flags"
+        Code Haven auto-detects your stack — if your project doesn't have
+        `pom.xml`, Java won't run. Disable flags are only needed to override
+        a *detected* stack (e.g., a `package.json` that exists only for tooling).
 
 === "Add SonarQube"
 
@@ -195,6 +194,89 @@ The pipeline adjusts its behavior based on how it was triggered:
 | **Pull Request** | Build, test, security scan, quality metrics — no deploy, no publish |
 | **Push to default branch** | Everything above + GitHub Pages + Docker `latest` tag |
 | **Tag push (`v*`)** | Everything above + GitHub Release + package publishing + versioned images |
+
+---
+
+## Alternative: Segmented Mode
+
+Instead of one unified workflow, you can split your pipeline into **concern-level workflows** — each with its own visibility and history in the GitHub Actions UI.
+
+!!! info "When to use Segmented Mode"
+    - You want to click "Security" and see **only** security results
+    - You want separate run histories for build vs. deploy vs. quality
+    - You don't want to see 17 nodes in a single workflow graph
+    - You prefer declaring what you **ARE** rather than disabling what you're NOT
+
+### Setup
+
+Create multiple small workflow files in `.github/workflows/`:
+
+=== "build.yml"
+
+    ```yaml
+    name: "🏗️ Build"
+    on: [push, pull_request]
+    permissions: { contents: read, checks: write, pull-requests: write }
+    jobs:
+      build:
+        uses: code-haven/code-haven/.github/workflows/_orchestrate-build.yml@main
+        secrets: inherit
+    ```
+
+=== "security.yml"
+
+    ```yaml
+    name: "🔒 Security"
+    on: [push, pull_request]
+    permissions: { contents: read, security-events: write, actions: read }
+    jobs:
+      security:
+        uses: code-haven/code-haven/.github/workflows/_orchestrate-security.yml@main
+        secrets: inherit
+    ```
+
+=== "quality.yml"
+
+    ```yaml
+    name: "📊 Quality"
+    on: [push, pull_request]
+    permissions: { contents: read, checks: write }
+    jobs:
+      quality:
+        uses: code-haven/code-haven/.github/workflows/_orchestrate-quality.yml@main
+        secrets: inherit
+    ```
+
+=== "deploy.yml (after build)"
+
+    ```yaml
+    name: "🚀 Deploy"
+    on:
+      workflow_run:
+        workflows: ["🏗️ Build"]
+        types: [completed]
+        branches: [main]
+    permissions: { contents: read, packages: write, id-token: write }
+    jobs:
+      deploy:
+        if: github.event.workflow_run.conclusion == 'success'
+        uses: code-haven/code-haven/.github/workflows/_orchestrate-deploy.yml@main
+        secrets: inherit
+    ```
+
+### Result in GitHub Actions
+
+```
+🏗️ Build       ✓  (detected C++ → ran CMake build + tests)
+🔒 Security    ✓  (ran Gitleaks + CodeQL + OSV)
+📊 Quality     ✓  (ran linting + metrics)
+🚀 Deploy      —  (no Dockerfile → completed in 5s)
+```
+
+Each is independently clickable with isolated run history. No disable flags needed.
+
+!!! tip "Full templates"
+    See [`examples/segmented/`](https://github.com/roachseb/code-haven/tree/main/examples/segmented) for ready-to-copy workflow files with comments.
 
 ---
 

@@ -1,0 +1,142 @@
+# ── Code Haven: Deploy Orchestrator ────────────────────────────
+# Handles Docker image build/push, Helm chart packaging, and intent-based deployment.
+# Designed to run after Build completes (use workflow_run trigger in consumer).
+name: "\U0001F680 Deploy"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                   { type: string,  default: 'ubuntu-latest' }
+      # ─── Docker ───
+      docker_disabled:          { type: boolean, default: false }
+      container_scan_disabled:  { type: boolean, default: false }
+      dockerfile_path:          { type: string,  default: 'Dockerfile' }
+      docker_context:           { type: string,  default: '.' }
+      docker_tag_extra:         { type: string,  default: 'latest' }
+      docker_registry:          { type: string,  default: 'ghcr.io' }
+      # ─── Helm ───
+      helm_disabled:            { type: boolean, default: false }
+      helm_chart_path:          { type: string,  default: '.' }
+      helm_values_files:        { type: string,  default: 'values.yaml' }
+      # ─── Intent Deploy ───
+      deploy_disabled:          { type: boolean, default: false }
+      deploy_environments:      { type: string,  default: 'dev,staging,prod' }
+      deploy_auto_apply_dev:    { type: boolean, default: true }
+      deploy_auto_apply_staging: { type: boolean, default: false }
+      deploy_auto_apply_prod:   { type: boolean, default: false }
+      deploy_tf_version:        { type: string,  default: '1.9' }
+    secrets:
+      DEPLOY_STATE_BUCKET:                  { required: false }
+      DEPLOY_GCP_WORKLOAD_IDENTITY_PROVIDER: { required: false }
+      DEPLOY_GCP_SERVICE_ACCOUNT:           { required: false }
+      DEPLOY_AWS_ROLE_ARN:                  { required: false }
+      DEPLOY_AWS_REGION:                    { required: false }
+      DEPLOY_AZURE_CLIENT_ID:              { required: false }
+      DEPLOY_AZURE_TENANT_ID:              { required: false }
+      DEPLOY_AZURE_SUBSCRIPTION_ID:        { required: false }
+
+jobs:
+  detect:
+    name: "\U0001F50D Detect"
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      has_dockerfile:    ${{ steps.check.outputs.has_dockerfile }}
+      has_helm:          ${{ steps.check.outputs.has_helm }}
+      has_deploy_intent: ${{ steps.check.outputs.has_deploy_intent }}
+      is_default_branch: ${{ steps.context.outputs.is_default_branch }}
+      is_tag:            ${{ steps.context.outputs.is_tag }}
+      is_pr:             ${{ steps.context.outputs.is_pr }}
+      tag_name:          ${{ steps.context.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Detect ref context
+        id: context
+        run: |
+          REF="$GITHUB_REF"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          [[ -z "$DEFAULT_BRANCH" ]] && DEFAULT_BRANCH="main"
+
+          IS_DEFAULT_BRANCH="false"; IS_TAG="false"; IS_PR="false"; TAG_NAME=""
+          if [[ "$REF" == refs/tags/* ]]; then
+            IS_TAG="true"; TAG_NAME="${REF#refs/tags/}"
+          elif [[ "$REF" == refs/pull/* ]]; then
+            IS_PR="true"
+          elif [[ "$REF" == "refs/heads/$DEFAULT_BRANCH" ]]; then
+            IS_DEFAULT_BRANCH="true"
+          fi
+
+          {
+            echo "is_default_branch=$IS_DEFAULT_BRANCH"
+            echo "is_tag=$IS_TAG"
+            echo "is_pr=$IS_PR"
+            echo "tag_name=$TAG_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect deploy-relevant files
+        id: check
+        run: |
+          check_any() { for f in "$@"; do [[ -f "$f" ]] && echo "true" && return; done; echo "false"; }
+          {
+            echo "has_dockerfile=$([[ -f ${{ inputs.dockerfile_path }} ]] && echo true || echo false)"
+            echo "has_helm=$([[ -f .helmignore ]] && echo true || echo false)"
+            echo "has_deploy_intent=$(check_any deploy.yml .codehaven/deploy.yml)"
+          } >> "$GITHUB_OUTPUT"
+
+  docker:
+    needs: detect
+    if: needs.detect.outputs.has_dockerfile == 'true' && !inputs.docker_disabled
+    uses: ./.github/workflows/_docker.yml
+    with:
+      runner: ${{ inputs.runner }}
+      docker_disabled: ${{ inputs.docker_disabled }}
+      container_scan_disabled: ${{ inputs.container_scan_disabled }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
+      docker_context: ${{ inputs.docker_context }}
+      docker_tag_extra: ${{ inputs.docker_tag_extra }}
+      docker_registry: ${{ inputs.docker_registry }}
+    secrets: inherit
+
+  helm:
+    needs: detect
+    if: needs.detect.outputs.has_helm == 'true' && !inputs.helm_disabled
+    uses: ./.github/workflows/_helm.yml
+    with:
+      runner: ${{ inputs.runner }}
+      helm_disabled: ${{ inputs.helm_disabled }}
+      helm_chart_path: ${{ inputs.helm_chart_path }}
+      helm_values_files: ${{ inputs.helm_values_files }}
+    secrets: inherit
+
+  deploy:
+    needs: [detect, docker]
+    if: >-
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.has_deploy_intent == 'true'
+      && needs.detect.outputs.has_dockerfile == 'true'
+      && !inputs.deploy_disabled
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      runner: ${{ inputs.runner }}
+      deploy_disabled: ${{ inputs.deploy_disabled }}
+      deploy_environments: ${{ inputs.deploy_environments }}
+      deploy_auto_apply_dev: ${{ inputs.deploy_auto_apply_dev }}
+      deploy_auto_apply_staging: ${{ inputs.deploy_auto_apply_staging }}
+      deploy_auto_apply_prod: ${{ inputs.deploy_auto_apply_prod }}
+      deploy_tf_version: ${{ inputs.deploy_tf_version }}
+      docker_registry: ${{ inputs.docker_registry }}
+      has_deploy_intent: ${{ needs.detect.outputs.has_deploy_intent }}
+      is_default_branch: ${{ needs.detect.outputs.is_default_branch }}
+      is_tag: ${{ needs.detect.outputs.is_tag }}
+      is_pr: ${{ needs.detect.outputs.is_pr }}
+      tag_name: ${{ needs.detect.outputs.tag_name }}
+    secrets:
+      DEPLOY_STATE_BUCKET: ${{ secrets.DEPLOY_STATE_BUCKET }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.DEPLOY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets.DEPLOY_GCP_SERVICE_ACCOUNT }}
+      AWS_ROLE_ARN: ${{ secrets.DEPLOY_AWS_ROLE_ARN }}
+      AWS_REGION: ${{ secrets.DEPLOY_AWS_REGION }}
+      AZURE_CLIENT_ID: ${{ secrets.DEPLOY_AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.DEPLOY_AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.DEPLOY_AZURE_SUBSCRIPTION_ID }}

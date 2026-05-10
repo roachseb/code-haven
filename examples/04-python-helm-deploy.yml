@@ -32,14 +32,6 @@ jobs:
       helm_values_files: 'deploy/helm/values.yaml,deploy/helm/values-production.yaml'
       k8s_namespace: 'my-app-prod'
       sonar_host_url: 'https://sonarqube.example.com'
-      # Only Python + Docker + Helm
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
     secrets: inherit
 
   # ── Deploy to staging on push to main ───────────────────────

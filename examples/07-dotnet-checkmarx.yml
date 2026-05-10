@@ -28,14 +28,6 @@ jobs:
       checkmarx_base_url: 'https://checkmarx.example.com'
       sonar_host_url: 'https://sonarqube.example.com'
       sonar_project_key: 'my-dotnet-api'
-      # Disable unused stacks
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      golang_disabled: true
-      rust_disabled: true
-      php_disabled: true
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       CHECKMARX_USERNAME: ${{ secrets.CX_USER }}

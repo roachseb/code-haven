@@ -1,0 +1,25 @@
+# ── Deploy ─────────────────────────────────────────────────────
+# Docker build/push, Helm packaging, and intent-based deployment.
+# Triggers after Build completes on default branch (not on PRs).
+name: "\U0001F680 Deploy"
+
+on:
+  workflow_run:
+    workflows: ["\U0001F3D7️ Build"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    uses: roachseb/code-haven/.github/workflows/_orchestrate-deploy.yml@main
+    secrets: inherit
+    # with:
+    #   docker_registry: 'ghcr.io'
+    #   deploy_environments: 'dev,staging,prod'
+    #   deploy_auto_apply_dev: true
