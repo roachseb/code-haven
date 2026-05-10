@@ -143,7 +143,7 @@ jobs:
         run: |
           FAILURES=0
           for fixture in tests/fixtures/*/deploy.yml; do
-            NAME=$(basename $(dirname "$fixture"))
+            NAME=$(basename "$(dirname "$fixture")")
             TMPJSON=$(mktemp --suffix=.json)
 
             # Convert YAML to JSON for schema validation

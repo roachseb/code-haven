@@ -98,11 +98,13 @@ jobs:
             exit 1
           fi
 
-          echo "cloud=$(yq '.cloud // ""' "$FILE")" >> "$GITHUB_OUTPUT"
-          echo "runtime=$(yq '.runtime // ""' "$FILE")" >> "$GITHUB_OUTPUT"
-          echo "kind=$(yq '.kind // "service"' "$FILE")" >> "$GITHUB_OUTPUT"
-          echo "team=$(yq '.team // "default"' "$FILE")" >> "$GITHUB_OUTPUT"
-          echo "expose=$(yq '.expose // "private"' "$FILE")" >> "$GITHUB_OUTPUT"
+          {
+            echo "cloud=$(yq '.cloud // ""' "$FILE")"
+            echo "runtime=$(yq '.runtime // ""' "$FILE")"
+            echo "kind=$(yq '.kind // "service"' "$FILE")"
+            echo "team=$(yq '.team // "default"' "$FILE")"
+            echo "expose=$(yq '.expose // "private"' "$FILE")"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Validate
         id: validate

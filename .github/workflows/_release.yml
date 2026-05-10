@@ -435,6 +435,6 @@ jobs:
             echo "| Python Package | ${{ needs.python-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| Go Binaries    | ${{ needs.go-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| Rust Crate     | ${{ needs.rust-release.result == 'success' && '✅' || '⬜ skipped' }} |"
-            echo \"| C++ Library    | ${{ needs.cpp-release.result == 'success' && '✅' || '⬜ skipped' }} |\"
+            echo "| C++ Library    | ${{ needs.cpp-release.result == 'success' && '✅' || '⬜ skipped' }} |"
             echo "| NuGet Package  | ${{ needs.dotnet-release.result == 'success' && '✅' || '⬜ skipped' }} |"
           } >> "$GITHUB_STEP_SUMMARY"
