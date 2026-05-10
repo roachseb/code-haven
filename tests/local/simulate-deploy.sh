@@ -308,11 +308,11 @@ if [[ "$RUN_ALL" == "true" ]]; then
   echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
   if [[ $FAIL -gt 0 ]]; then
     echo -e "  ${GREEN}$PASS passed${NC}, ${RED}$FAIL failed${NC}"
-  else
-    echo -e "  ${GREEN}All $PASS fixtures passed${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    exit 1
   fi
+  echo -e "  ${GREEN}All $PASS fixtures passed${NC}"
   echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-  [[ $FAIL -gt 0 ]] && exit 1
 else
   # Remove --plan and --env flags from the path
   CLEAN_PATH="$FIXTURE_PATH"
