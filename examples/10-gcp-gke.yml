@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 10 — GKE Helm-based Deployment
+#
+# Java Spring Boot service deployed to GKE via embedded Helm chart.
+# Demonstrates: GKE runtime, cluster_name, namespace, workload identity.
+# ═══════════════════════════════════════════════════════════════
+
+kind: service
+cloud: gcp
+runtime: gke
+team: backend
+port: 8080
+expose: private
+cluster_name: main-cluster
+namespace: backend
+
+resources:
+  cpu: 500m    # K8s CPU format
+  memory: 512Mi
+
+replicas:
+  min: 2
+  max: 10
+
+health:
+  path: /actuator/health
+
+service_account: backend-runtime@my-project.iam.gserviceaccount.com
+
+env:
+  SPRING_PROFILES_ACTIVE: cloud
+  SERVER_PORT: "8080"

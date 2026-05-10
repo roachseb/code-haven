@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════════
+# deploy.yml — Service Deployment Intent
+#
+# This is all a developer needs to write to deploy their
+# containerized service. No Terraform knowledge required.
+#
+# Code Haven reads this file and automatically:
+#   1. Selects the right Terraform module (Cloud Run, ECS, etc.)
+#   2. Merges per-environment overrides (deploy.dev.yml, etc.)
+#   3. Generates terraform.auto.tfvars.json
+#   4. Plans on every PR, applies on main/tag
+#
+# Supported kinds:    service (Phase 1)
+# Supported clouds:   gcp (Phase 1)
+# Supported runtimes: cloud-run (Phase 1)
+#
+# Destroy is NEVER automated. See docs/workflows/deploy.md
+# ═══════════════════════════════════════════════════════════════
+
+# ── What is this? ────────────────────────────────────────────
+kind: service              # service | worker | cronjob (Phase 2)
+
+# ── Where to deploy ──────────────────────────────────────────
+cloud: gcp                 # gcp | aws | azure (Phase 2)
+runtime: cloud-run         # cloud-run | gke | ecs | container-apps (Phase 2)
+
+# ── Team identity ────────────────────────────────────────────
+# Maps to cloud project isolation and TF state path:
+#   state = {bucket}/{team}/{service_name}/{environment}
+team: platform
+
+# ── Service configuration ────────────────────────────────────
+port: 8080
+expose: private            # private (default) | public
+                           # Defense posture: private = internal-only ingress
+
+# ── Scaling ──────────────────────────────────────────────────
+replicas:
+  min: 1                   # 0 = scale-to-zero (saves cost in dev)
+  max: 5
+
+# ── Resources ────────────────────────────────────────────────
+resources:
+  cpu: "1"
+  memory: 512Mi
+
+# ── Health check ─────────────────────────────────────────────
+health:
+  path: /health
+
+# ── Environment variables (non-secret) ───────────────────────
+env:
+  APP_NAME: my-flask-api
+  LOG_LEVEL: info

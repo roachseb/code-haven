@@ -11,7 +11,7 @@ Pages are **disabled by default**. To enable, set `pages_disabled: false` in you
 ```yaml
 jobs:
   ci:
-    uses: roachseb/code-haven/.github/workflows/devsecops.yml@main
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
     with:
       pages_disabled: false    # Enable GitHub Pages deployment
     secrets: inherit
@@ -82,9 +82,16 @@ For Angular/React/Next.js projects, if the build output contains an `index.html`
 the Pages job deploys it under `/app/` and links it from the portal. This gives
 you a live preview of your frontend application alongside all the usual reports.
 
-## How It Works
+## How it works
 
 1. Downloads all artifacts from every preceding job
 2. Copies them into categorized `public/` subdirectories
-3. Generates the smart index if no MkDocs site exists
-4. Uploads and deploys to GitHub Pages
+3. If a MkDocs site was built, uses it as the root (`/`)
+4. If no MkDocs site exists, generates the smart portal index
+5. Uploads and deploys to GitHub Pages via `actions/deploy-pages`
+
+!!! note "MkDocs + reports coexistence"
+    If your project has a `mkdocs.yml`, Code Haven uses your built MkDocs site
+    as the root. Reports are still deployed under their subpaths
+    (`/java/jacoco/`, `/python/coverage/`, etc.) and can be linked from your
+    MkDocs pages.

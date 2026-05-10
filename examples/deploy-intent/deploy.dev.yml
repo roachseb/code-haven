@@ -1,0 +1,16 @@
+# deploy.dev.yml — Dev environment overrides
+# Merged on top of deploy.yml when deploying to dev
+
+project_id: myorg-dev-123456
+region: northamerica-northeast1
+
+replicas:
+  min: 0                   # Scale-to-zero in dev (save cost)
+  max: 2
+
+resources:
+  cpu: "0.5"
+  memory: 256Mi
+
+env:
+  LOG_LEVEL: debug

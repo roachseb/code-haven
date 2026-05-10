@@ -1,0 +1,43 @@
+# ── Example 08: C++ App with Conan Dependencies ──────────────
+#
+# A C++ application that consumes libraries from a Conan remote.
+# Code Haven auto-detects CMakeLists.txt + conanfile.txt and runs:
+#   build → test → lint → format → Conan package → security scan
+#
+# Required repo files:
+#   CMakeLists.txt    — your build definition
+#   conanfile.txt     — your Conan dependencies
+#   src/              — your source code
+#
+# Required org/repo config:
+#   Variable: CONAN_REMOTE_URL  — Conan remote URL
+#   Secret:   CONAN_LOGIN_USERNAME
+#   Secret:   CONAN_PASSWORD
+# ──────────────────────────────────────────────────────────────
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  packages: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      # ── C++ Intent ──────────────────────────────────────
+      cpp_compiler: 'gcc'            # gcc | clang
+      cpp_compiler_version: '13'     # Compiler version
+      cpp_standard: '20'             # C++ standard (17, 20, 23)
+      cpp_conan_remote: ${{ vars.CONAN_REMOTE_URL }}
+    secrets: inherit

@@ -163,3 +163,83 @@ All workflows in a run share the same artifact namespace. Artifacts uploaded by
 | `go-reports` | `_build-go.yml` | `_pages.yml` |
 | `rust-doc` | `_build-rust.yml` | `_pages.yml` |
 | `scc-report` | `_quality.yml` | `_pages.yml` |
+
+---
+
+## Intent-Based Deployment
+
+Beyond build/test/scan, Code Haven includes an **intent-based deployment system**.
+Developers write a small `deploy.yml` file that declares *what* they want —
+Code Haven generates the Terraform code and manages the infrastructure lifecycle.
+
+### Design principle
+
+> **Developers declare intent. Code Haven handles infrastructure.**
+
+A developer writes ~15 lines of YAML. Code Haven:
+
+1. Parses the intent (`deploy.yml`)
+2. Selects the correct Terraform module for the cloud/runtime
+3. Copies the root template into a workspace
+4. Generates `terraform.auto.tfvars.json` from the intent
+5. Runs `terraform plan` (on PR) or `terraform apply` (on main/tag)
+
+### Architecture
+
+```
+Developer's repo                    Code Haven
+────────────────                    ──────────
+deploy.yml  ──────► deploy-generate action
+                    │
+                    ├── parse YAML (yq)
+                    ├── merge env overrides
+                    ├── select module + template
+                    ├── generate tfvars
+                    │
+                    ▼
+             .codehaven-deploy/        ← generated workspace
+             ├── main.tf               ← root template (backend + provider + module)
+             ├── variables.tf          ← variable declarations
+             ├── outputs.tf            ← output forwarding
+             ├── terraform.auto.tfvars.json  ← generated values
+             └── modules/
+                 └── {cloud}/{runtime}/     ← symlinked Terraform module
+                     ├── main.tf
+                     ├── variables.tf
+                     └── outputs.tf
+                    │
+                    ▼
+             _deploy.yml workflow
+             ├── terraform init (cloud-specific backend)
+             ├── terraform plan  (always)
+             ├── terraform apply (main → dev, tag → prod)
+             └── approval gates  (prod requires manual approval)
+```
+
+### Supported runtimes
+
+| Cloud | Runtime | Module path |
+|-------|---------|-------------|
+| GCP | Cloud Run | `modules/gcp/cloud-run/` |
+| GCP | Cloud Run Job | `modules/gcp/cloud-run-job/` |
+| GCP | GKE (Helm) | `modules/gcp/gke/` |
+| GCP | Compute Engine | `modules/gcp/compute/` |
+| AWS | ECS Fargate | `modules/aws/ecs/` |
+| Azure | Container Apps | `modules/azure/container-apps/` |
+
+### Environment gating
+
+| Trigger | What happens |
+|---------|-------------|
+| Pull request | `terraform plan` only — no changes applied |
+| Push to `main` | Auto-apply to **dev** environment |
+| Tag push (`v*`) | Plan for **staging** + **prod** with manual approval gates |
+
+### Safety guarantees
+
+- **Destroy is never automated** — `terraform destroy` is never run by the pipeline
+- **State is remote** — stored in GCS, S3, or Azure Storage (not in the repo)
+- **Plan before apply** — every change is planned first, even auto-applies
+- **Branch isolation** — each environment uses its own Terraform workspace
+
+See the [Deploy workflow documentation](workflows/deploy.md) for the full reference.

@@ -1,10 +1,19 @@
 # Examples
 
-Real-world workflow configurations for common scenarios.
+Real-world workflow configurations for common scenarios. Copy any example into
+your `.github/workflows/ci.yml` to get started.
 
-## 1. Zero-Config (Auto-detect Everything)
+!!! tip "Start minimal"
+    Example 1 (zero-config) works for most projects. Only add configuration
+    when you need to override defaults or disable unused stacks.
 
-The simplest possible configuration. The pipeline discovers your stack automatically.
+---
+
+## Build & Test Examples
+
+### 1. Zero-Config (Auto-detect Everything)
+
+The simplest possible configuration. Detects your stack automatically.
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -22,9 +31,9 @@ jobs:
 
 ---
 
-## 2. Java (Maven) + Docker + SonarQube
+### 2. Java (Maven) + Docker + SonarQube
 
-A typical Spring Boot microservice pipeline.
+A Spring Boot microservice with code quality scanning.
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -33,8 +42,6 @@ on:
     branches: [main, develop, 'release/**']
   pull_request:
     branches: [main]
-  release:
-    types: [published]
 
 jobs:
   ci:
@@ -46,7 +53,6 @@ jobs:
       java_formatter: 'spotify'
       sonar_host_url: 'https://sonarqube.example.com'
       sonar_project_key: 'my-spring-boot-app'
-      # Disable stacks we don't use
       npm_disabled: true
       python_disabled: true
       golang_disabled: true
@@ -58,9 +64,9 @@ jobs:
 
 ---
 
-## 3. Angular + E2E Tests
+### 3. Angular + E2E Tests
 
-A frontend application with Cypress and Playwright.
+Frontend application with Cypress and Playwright.
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -76,7 +82,6 @@ jobs:
     with:
       node_version: '20'
       cypress_browsers: 'chrome,firefox'
-      # Only frontend
       maven_disabled: true
       python_disabled: true
       golang_disabled: true
@@ -88,9 +93,9 @@ jobs:
 
 ---
 
-## 4. Python + Django + Docker + Helm Deploy
+### 4. Python + Django + Docker + Helm Deploy
 
-A full-stack Python deployment pipeline.
+Full-stack Python with Kubernetes deployment.
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -117,9 +122,7 @@ jobs:
 
 ---
 
-## 5. Multi-Cloud Go Service
-
-A Go microservice deploying to multiple cloud providers.
+### 5. Go Microservice
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -144,9 +147,9 @@ jobs:
 
 ---
 
-## 6. Rust + Hurl API Tests
+### 6. Rust + Hurl API Tests
 
-A Rust backend with API contract testing.
+Rust backend with HTTP contract testing.
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -173,9 +176,9 @@ jobs:
 
 ---
 
-## 7. .NET + Checkmarx + SQLFluff
+### 7. .NET + Checkmarx + SQLFluff
 
-An enterprise .NET application with advanced security scanning.
+Enterprise .NET application with advanced security.
 
 ```yaml title=".github/workflows/ci.yml"
 name: CI/CD
@@ -443,10 +446,111 @@ jobs:
 
 ---
 
+## Intent-Based Deployment Examples
+
+These examples use the `deploy.yml` file placed at the root of your repository.
+Code Haven reads this file, generates Terraform, and manages the full infrastructure
+lifecycle. See [Deploy (Intent-Based)](workflows/deploy.md) for the full reference.
+
+### 14. GCP Cloud Run (Simplest Deploy)
+
+```yaml title="deploy.yml"
+team: platform
+cloud: gcp
+runtime: cloud-run
+project_id: my-gcp-project
+region: us-central1
+expose: private
+
+environments:
+  dev:
+    min_instances: 0
+    max_instances: 3
+  prod:
+    min_instances: 2
+    max_instances: 10
+```
+
+### 15. AWS ECS Fargate
+
+```yaml title="deploy.yml"
+team: backend
+cloud: aws
+runtime: ecs
+region: us-east-1
+expose: internal
+vpc_id: vpc-0abc123
+subnet_ids:
+  - subnet-aaa
+  - subnet-bbb
+
+environments:
+  dev:
+    cpu: "256"
+    memory: "512"
+  prod:
+    cpu: "1024"
+    memory: "2048"
+    min_instances: 2
+    max_instances: 8
+```
+
+### 16. GCP GKE (Kubernetes via Helm)
+
+```yaml title="deploy.yml"
+team: data
+cloud: gcp
+runtime: gke
+project_id: my-gcp-project
+region: us-central1
+cluster_name: prod-cluster
+namespace: data-services
+expose: private
+
+environments:
+  dev:
+    max_instances: 2
+  prod:
+    min_instances: 3
+    max_instances: 10
+    cpu: "2"
+    memory: 2Gi
+```
+
+### 17. Multi-Service Application
+
+```yaml title="deploy.yml"
+team: ecommerce
+cloud: gcp
+project_id: ecommerce-prod
+region: us-central1
+
+services:
+  - name: api
+    runtime: cloud-run
+    expose: public
+    cpu: "2"
+    memory: 1Gi
+    health_path: /health
+
+  - name: worker
+    kind: worker
+    cpu: "1"
+    memory: 512Mi
+
+  - name: scheduler
+    kind: cronjob
+    schedule: "0 * * * *"
+    cpu: "0.5"
+    memory: 256Mi
+```
+
+---
+
 ## Tips
 
 !!! tip "Disable what you don't need"
-    The pipeline will skip detection for disabled stacks, saving runner minutes.
+    The pipeline skips detection for disabled stacks, saving runner minutes.
 
 !!! tip "Use `secrets: inherit`"
     This passes all repository secrets to the reusable workflow. Required for
@@ -454,3 +558,7 @@ jobs:
 
 !!! tip "Branch protection"
     Set up required status checks on your default branch to enforce the pipeline.
+
+!!! tip "Intent-based deploy needs no `with:` block"
+    Just add a `deploy.yml` file to your repo root. Code Haven detects it
+    automatically and generates all infrastructure.

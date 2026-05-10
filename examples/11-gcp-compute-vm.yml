@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 11 — GCP Compute Engine VM
+#
+# ML inference server on a dedicated VM (Container-Optimized OS).
+# Demonstrates: Compute runtime, machine_type, disk_size, zone.
+# ═══════════════════════════════════════════════════════════════
+
+kind: service
+cloud: gcp
+runtime: compute
+team: ml-team
+port: 5000
+expose: private
+machine_type: n2-standard-4
+zone: us-central1-a
+disk_size_gb: 50
+
+resources:
+  cpu: "4"
+  memory: 16Gi
+
+health:
+  path: /api/health
+
+env:
+  MODEL_PATH: /models/v2
+  WORKERS: "4"

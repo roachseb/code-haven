@@ -1,0 +1,24 @@
+team: platform
+cloud: gcp
+runtime: gke
+kind: service
+expose: private
+port: 8080
+region: us-central1
+project_id: my-project-dev
+cluster_name: main-cluster
+namespace: platform
+
+resources:
+  cpu: 500m
+  memory: 256Mi
+
+replicas:
+  min: 2
+  max: 10
+
+health:
+  path: /healthz
+
+env:
+  NODE_ENV: development

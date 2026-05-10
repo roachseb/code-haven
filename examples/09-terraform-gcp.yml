@@ -1,0 +1,50 @@
+# ── Example 09: Terraform Infrastructure (GCP) ───────────────
+#
+# An infrastructure-as-code project using Terraform.
+# Code Haven auto-detects *.tf files and runs:
+#   fmt → validate → tflint → plan → (conditional apply)
+#
+# Branch strategy:
+#   PR / feature    → plan all environments (never apply)
+#   main            → auto-apply dev, plan staging+prod
+#   tag / release   → apply prod
+#
+# Repo structure (Option B — workspace-based):
+#   main.tf                     — shared configuration
+#   variables.tf                — variable declarations
+#   backend.tf                  — state backend config
+#   terraform.tfvars.dev        — dev environment values
+#   terraform.tfvars.staging    — staging environment values
+#   terraform.tfvars.prod       — production environment values
+#
+# Required org/repo config:
+#   Secret: TF_GCP_WORKLOAD_IDENTITY_PROVIDER
+#   Secret: TF_GCP_SERVICE_ACCOUNT
+# ──────────────────────────────────────────────────────────────
+name: CI/CD
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  id-token: write
+  security-events: write
+  actions: read
+
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      # ── Terraform Intent ────────────────────────────────
+      tf_cloud_provider: 'gcp'
+      tf_version: '1.9'
+      tf_environments: 'dev,staging,prod'
+      tf_auto_apply_dev: true
+      tf_auto_apply_staging: false    # Requires GitHub Environment approval
+      # prod always requires a tag/release — never auto-applies on main
+    secrets: inherit

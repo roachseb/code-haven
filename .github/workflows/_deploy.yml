@@ -1,0 +1,667 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Intent-Based Service Deployment
+# Internal reusable workflow — called from devsecops.yml
+#
+# This workflow deploys containerized services based on a
+# developer's deploy.yml intent file. The developer never writes
+# Terraform — Code Haven owns the modules and generates everything.
+#
+# How it works:
+#   1. Developer writes deploy.yml (kind: service, cloud: gcp, etc.)
+#   2. Developer writes deploy.dev.yml / deploy.prod.yml overrides
+#   3. Docker job builds the container image
+#   4. This workflow:
+#      a. Parses the intent
+#      b. Copies Code Haven's pre-built Terraform module
+#      c. Generates terraform.auto.tfvars.json from merged intent
+#      d. Plans (all envs) → Applies (gated per environment)
+#
+# Branch gating:
+#   PR / feature    → plan all environments (never apply)
+#   main            → auto-apply dev, plan staging/prod
+#   tag / release   → apply prod (with approval gate)
+#
+# Destroy is NEVER automated. Infrastructure teardown must be
+# performed manually via the GCP console or a separate process.
+#
+# Phase 1: GCP Cloud Run
+# Phase 2: AWS ECS/Fargate, Azure Container Apps, GKE, Compute VMs, Workers/CronJobs — DONE
+# ═══════════════════════════════════════════════════════════════
+name: "🚀 Deploy Service"
+
+on:
+  workflow_call:
+    inputs:
+      runner:                    { type: string,  default: 'ubuntu-latest' }
+      deploy_disabled:           { type: boolean, default: false }
+      deploy_environments:       { type: string,  default: 'dev,staging,prod' }
+      deploy_auto_apply_dev:     { type: boolean, default: true }
+      deploy_auto_apply_staging: { type: boolean, default: false }
+      deploy_auto_apply_prod:    { type: boolean, default: false }
+      deploy_tf_version:         { type: string,  default: '1.9' }
+      docker_registry:           { type: string,  default: 'ghcr.io' }
+      has_deploy_intent:         { type: string,  default: 'false' }
+      is_default_branch:         { type: string,  default: 'false' }
+      is_tag:                    { type: string,  default: 'false' }
+      is_pr:                     { type: string,  default: 'false' }
+      tag_name:                  { type: string,  default: '' }
+
+    secrets:
+      # ── State Backend ──────────────────────────────────
+      DEPLOY_STATE_BUCKET:              { required: false }
+      # ── GCP Credentials ────────────────────────────────
+      GCP_WORKLOAD_IDENTITY_PROVIDER:   { required: false }
+      GCP_SERVICE_ACCOUNT:              { required: false }
+      # ── AWS Credentials ────────────────────────────────
+      AWS_ROLE_ARN:                     { required: false }
+      AWS_REGION:                       { required: false }
+      # ── Azure Credentials ──────────────────────────────
+      AZURE_CLIENT_ID:                  { required: false }
+      AZURE_TENANT_ID:                  { required: false }
+      AZURE_SUBSCRIPTION_ID:            { required: false }
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Parse — Read deploy.yml, validate, extract environments
+  # ──────────────────────────────────────────────────────────
+  deploy-parse:
+    name: "📋 Parse Deploy Intent"
+    if: inputs.has_deploy_intent == 'true' && !inputs.deploy_disabled
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      valid: ${{ steps.validate.outputs.valid }}
+      cloud: ${{ steps.quick_parse.outputs.cloud }}
+      environments_json: ${{ steps.envs.outputs.environments_json }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          if ! command -v yq &>/dev/null; then
+            sudo wget -qO /usr/local/bin/yq \
+              https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+
+      - name: Quick parse
+        id: quick_parse
+        run: |
+          FILE=""
+          [[ -f "deploy.yml" ]] && FILE="deploy.yml"
+          [[ -f ".codehaven/deploy.yml" ]] && FILE=".codehaven/deploy.yml"
+          if [[ -z "$FILE" ]]; then
+            echo "❌ deploy.yml not found"
+            exit 1
+          fi
+
+          echo "cloud=$(yq '.cloud // ""' "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "runtime=$(yq '.runtime // ""' "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "kind=$(yq '.kind // "service"' "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "team=$(yq '.team // "default"' "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "expose=$(yq '.expose // "private"' "$FILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Validate
+        id: validate
+        run: |
+          VALID="true"
+          CLOUD="${{ steps.quick_parse.outputs.cloud }}"
+          RUNTIME="${{ steps.quick_parse.outputs.runtime }}"
+
+          if [[ -z "$CLOUD" || "$CLOUD" == "null" ]]; then
+            echo "❌ 'cloud' is required in deploy.yml"
+            VALID="false"
+          fi
+          if [[ -z "$RUNTIME" || "$RUNTIME" == "null" ]]; then
+            echo "❌ 'runtime' is required in deploy.yml"
+            VALID="false"
+          fi
+
+          case "$CLOUD-$RUNTIME" in
+            gcp-cloud-run|gcp-gke|gcp-compute|gcp-cloud-run-job) echo "✅ GCP ${RUNTIME} — supported" ;;
+            aws-ecs) echo "✅ AWS ECS Fargate — supported" ;;
+            azure-container-apps) echo "✅ Azure Container Apps — supported" ;;
+            *)
+              echo "⚠️ ${CLOUD}/${RUNTIME} is not supported"
+              VALID="false" ;;
+          esac
+
+          echo "valid=$VALID" >> "$GITHUB_OUTPUT"
+
+      - name: Parse environments
+        id: envs
+        run: |
+          JSON=$(echo '${{ inputs.deploy_environments }}' | \
+            tr ',' '\n' | sed 's/^ *//;s/ *$//' | \
+            jq -R . | jq -sc .)
+          echo "environments_json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          {
+            echo "## 🚀 Deploy Intent"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Kind | \`${{ steps.quick_parse.outputs.kind }}\` |"
+            echo "| Cloud | \`${{ steps.quick_parse.outputs.cloud }}\` |"
+            echo "| Runtime | \`${{ steps.quick_parse.outputs.runtime }}\` |"
+            echo "| Team | \`${{ steps.quick_parse.outputs.team }}\` |"
+            echo "| Exposure | \`${{ steps.quick_parse.outputs.expose }}\` |"
+            echo "| Environments | \`${{ inputs.deploy_environments }}\` |"
+            echo "| Valid | ${{ steps.validate.outputs.valid == 'true' && '✅ Yes' || '❌ No' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Plan — Generate TF config from intent, plan each environment
+  # ──────────────────────────────────────────────────────────
+  deploy-plan:
+    name: "📐 Plan · ${{ matrix.environment }}"
+    needs: deploy-parse
+    if: needs.deploy-parse.outputs.valid == 'true'
+    runs-on: ${{ inputs.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.deploy-parse.outputs.environments_json) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.deploy_tf_version }}
+
+      # ── Cloud Authentication ──────────────────────────
+      - name: GCP Auth
+        if: needs.deploy-parse.outputs.cloud == 'gcp'
+        uses: ./actions/cloud-login
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: AWS Auth
+        if: needs.deploy-parse.outputs.cloud == 'aws'
+        uses: ./actions/cloud-login
+        with:
+          provider: aws
+          aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws_region: ${{ secrets.AWS_REGION }}
+
+      - name: Azure Auth
+        if: needs.deploy-parse.outputs.cloud == 'azure'
+        uses: ./actions/cloud-login
+        with:
+          provider: azure
+          azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Generate Terraform from Intent ────────────────
+      - name: Determine image tag
+        id: image
+        run: |
+          if [[ "${{ inputs.is_tag }}" == "true" && -n "${{ inputs.tag_name }}" ]]; then
+            echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate deploy config
+        uses: ./actions/deploy-generate
+        id: generate
+        with:
+          environment: ${{ matrix.environment }}
+          docker_registry: ${{ inputs.docker_registry }}
+          image_tag: ${{ steps.image.outputs.tag }}
+
+      # ── Terraform Init + Plan ─────────────────────────
+      - name: Terraform Init
+        working-directory: .codehaven-deploy
+        env:
+          CLOUD: ${{ steps.generate.outputs.cloud }}
+        run: |
+          TEAM="${{ steps.generate.outputs.team }}"
+          SERVICE="${{ steps.generate.outputs.service_name }}"
+          ENV="${{ matrix.environment }}"
+          PREFIX="${TEAM}/${SERVICE}/${ENV}"
+
+          case "$CLOUD" in
+            gcp)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="prefix=${PREFIX}"
+              ;;
+            aws)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="key=${PREFIX}/terraform.tfstate" \
+                -backend-config="region=${{ secrets.AWS_REGION }}"
+              ;;
+            azure)
+              terraform init \
+                -backend-config="storage_account_name=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="container_name=tfstate" \
+                -backend-config="key=${PREFIX}/terraform.tfstate"
+              ;;
+          esac
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: .codehaven-deploy
+        run: |
+          set +e
+          terraform plan \
+            -detailed-exitcode \
+            -out=tfplan \
+            -no-color 2>&1 | tee plan_output.txt
+          EXIT_CODE=$?
+          set -e
+
+          # 0 = no changes, 1 = error, 2 = changes present
+          if [[ $EXIT_CODE -eq 1 ]]; then
+            echo "❌ Terraform plan failed"
+            exit 1
+          fi
+
+          echo "has_changes=$([[ $EXIT_CODE -eq 2 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Comment plan on PR
+        if: inputs.is_pr == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('.codehaven-deploy/plan_output.txt', 'utf8');
+            const env = '${{ matrix.environment }}';
+            const kind = '${{ steps.generate.outputs.kind }}';
+            const runtime = '${{ steps.generate.outputs.runtime }}';
+            const body = [
+              `## 🚀 Deploy Plan — \`${env}\` (\`${kind}\` → \`${runtime}\`)`,
+              '',
+              '<details>',
+              '<summary>Terraform Plan Output</summary>',
+              '',
+              '```hcl',
+              plan.substring(0, 60000),
+              '```',
+              '',
+              '</details>'
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Upload plan artifact
+        if: steps.plan.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-plan-${{ matrix.environment }}
+          path: |
+            .codehaven-deploy/tfplan
+            .codehaven-deploy/terraform.auto.tfvars.json
+          retention-days: 7
+
+      - name: Plan Summary
+        if: always()
+        run: |
+          {
+            echo "## 📐 Deploy Plan — ${{ matrix.environment }}"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Service | \`${{ steps.generate.outputs.service_name }}\` |"
+            echo "| Team | \`${{ steps.generate.outputs.team }}\` |"
+            echo "| Project | \`${{ steps.generate.outputs.project_id }}\` |"
+            echo "| Cloud | \`${{ steps.generate.outputs.cloud }}\` / \`${{ steps.generate.outputs.runtime }}\` |"
+            echo "| Image | \`${{ inputs.docker_registry }}/${GITHUB_REPOSITORY}:${{ steps.image.outputs.tag }}\` |"
+            echo "| Changes | ${{ steps.plan.outputs.has_changes == 'true' && '⚡ Yes' || '✅ No changes' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Apply DEV — Auto-apply on default branch push
+  # ──────────────────────────────────────────────────────────
+  deploy-apply-dev:
+    name: "🚀 Apply · dev"
+    needs: [deploy-parse, deploy-plan]
+    if: >-
+      needs.deploy-parse.outputs.valid == 'true'
+      && inputs.deploy_auto_apply_dev
+      && (inputs.is_default_branch == 'true' || inputs.is_tag == 'true')
+      && contains(inputs.deploy_environments, 'dev')
+    runs-on: ${{ inputs.runner }}
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.deploy_tf_version }}
+
+      - name: GCP Auth
+        if: needs.deploy-parse.outputs.cloud == 'gcp'
+        uses: ./actions/cloud-login
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: AWS Auth
+        if: needs.deploy-parse.outputs.cloud == 'aws'
+        uses: ./actions/cloud-login
+        with:
+          provider: aws
+          aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws_region: ${{ secrets.AWS_REGION }}
+
+      - name: Azure Auth
+        if: needs.deploy-parse.outputs.cloud == 'azure'
+        uses: ./actions/cloud-login
+        with:
+          provider: azure
+          azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Determine image tag
+        id: image
+        run: |
+          if [[ "${{ inputs.is_tag }}" == "true" && -n "${{ inputs.tag_name }}" ]]; then
+            echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate deploy config
+        uses: ./actions/deploy-generate
+        id: generate
+        with:
+          environment: dev
+          docker_registry: ${{ inputs.docker_registry }}
+          image_tag: ${{ steps.image.outputs.tag }}
+
+      - name: Terraform Init
+        working-directory: .codehaven-deploy
+        env:
+          CLOUD: ${{ steps.generate.outputs.cloud }}
+        run: |
+          PREFIX="${{ steps.generate.outputs.team }}/${{ steps.generate.outputs.service_name }}/dev"
+          case "$CLOUD" in
+            gcp)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="prefix=${PREFIX}"
+              ;;
+            aws)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="key=${PREFIX}/terraform.tfstate" \
+                -backend-config="region=${{ secrets.AWS_REGION }}"
+              ;;
+            azure)
+              terraform init \
+                -backend-config="storage_account_name=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="container_name=tfstate" \
+                -backend-config="key=${PREFIX}/terraform.tfstate"
+              ;;
+          esac
+
+      - name: Terraform Apply
+        working-directory: .codehaven-deploy
+        run: |
+          terraform apply -auto-approve -no-color 2>&1 | tee apply_output.txt
+
+      - name: Deployment Summary
+        if: always()
+        working-directory: .codehaven-deploy
+        run: |
+          URL=$(terraform output -raw url 2>/dev/null || echo "N/A")
+          REVISION=$(terraform output -raw latest_revision 2>/dev/null || echo "N/A")
+          {
+            echo "## 🚀 Deployed to DEV"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Service | \`${{ steps.generate.outputs.service_name }}\` |"
+            echo "| Project | \`${{ steps.generate.outputs.project_id }}\` |"
+            echo "| URL | \`$URL\` |"
+            echo "| Revision | \`$REVISION\` |"
+            echo "| Image | \`${{ inputs.docker_registry }}/${GITHUB_REPOSITORY}:${{ steps.image.outputs.tag }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Apply STAGING — Gated (requires GitHub Environment approval)
+  # ──────────────────────────────────────────────────────────
+  deploy-apply-staging:
+    name: "🚀 Apply · staging"
+    needs: [deploy-parse, deploy-plan, deploy-apply-dev]
+    if: >-
+      always()
+      && needs.deploy-parse.outputs.valid == 'true'
+      && needs.deploy-plan.result == 'success'
+      && (needs.deploy-apply-dev.result == 'success' || needs.deploy-apply-dev.result == 'skipped')
+      && inputs.deploy_auto_apply_staging
+      && (inputs.is_default_branch == 'true' || inputs.is_tag == 'true')
+      && contains(inputs.deploy_environments, 'staging')
+    runs-on: ${{ inputs.runner }}
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.deploy_tf_version }}
+
+      - name: GCP Auth
+        if: needs.deploy-parse.outputs.cloud == 'gcp'
+        uses: ./actions/cloud-login
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: AWS Auth
+        if: needs.deploy-parse.outputs.cloud == 'aws'
+        uses: ./actions/cloud-login
+        with:
+          provider: aws
+          aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws_region: ${{ secrets.AWS_REGION }}
+
+      - name: Azure Auth
+        if: needs.deploy-parse.outputs.cloud == 'azure'
+        uses: ./actions/cloud-login
+        with:
+          provider: azure
+          azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Determine image tag
+        id: image
+        run: |
+          if [[ "${{ inputs.is_tag }}" == "true" && -n "${{ inputs.tag_name }}" ]]; then
+            echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate deploy config
+        uses: ./actions/deploy-generate
+        id: generate
+        with:
+          environment: staging
+          docker_registry: ${{ inputs.docker_registry }}
+          image_tag: ${{ steps.image.outputs.tag }}
+
+      - name: Terraform Init
+        working-directory: .codehaven-deploy
+        env:
+          CLOUD: ${{ steps.generate.outputs.cloud }}
+        run: |
+          PREFIX="${{ steps.generate.outputs.team }}/${{ steps.generate.outputs.service_name }}/staging"
+          case "$CLOUD" in
+            gcp)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="prefix=${PREFIX}"
+              ;;
+            aws)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="key=${PREFIX}/terraform.tfstate" \
+                -backend-config="region=${{ secrets.AWS_REGION }}"
+              ;;
+            azure)
+              terraform init \
+                -backend-config="storage_account_name=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="container_name=tfstate" \
+                -backend-config="key=${PREFIX}/terraform.tfstate"
+              ;;
+          esac
+
+      - name: Terraform Apply
+        working-directory: .codehaven-deploy
+        run: |
+          terraform apply -auto-approve -no-color 2>&1 | tee apply_output.txt
+
+      - name: Deployment Summary
+        if: always()
+        working-directory: .codehaven-deploy
+        run: |
+          URL=$(terraform output -raw url 2>/dev/null || echo "N/A")
+          REVISION=$(terraform output -raw latest_revision 2>/dev/null || echo "N/A")
+          {
+            echo "## 🚀 Deployed to STAGING"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Service | \`${{ steps.generate.outputs.service_name }}\` |"
+            echo "| Project | \`${{ steps.generate.outputs.project_id }}\` |"
+            echo "| URL | \`$URL\` |"
+            echo "| Revision | \`$REVISION\` |"
+            echo "| Image | \`${{ inputs.docker_registry }}/${GITHUB_REPOSITORY}:${{ steps.image.outputs.tag }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────
+  # Apply PROD — Tag-only + Environment approval gate
+  # ──────────────────────────────────────────────────────────
+  deploy-apply-prod:
+    name: "🚀 Apply · production"
+    needs: [deploy-parse, deploy-plan, deploy-apply-staging]
+    if: >-
+      always()
+      && needs.deploy-parse.outputs.valid == 'true'
+      && needs.deploy-plan.result == 'success'
+      && (needs.deploy-apply-staging.result == 'success' || needs.deploy-apply-staging.result == 'skipped')
+      && inputs.is_tag == 'true'
+      && contains(inputs.deploy_environments, 'prod')
+    runs-on: ${{ inputs.runner }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.deploy_tf_version }}
+
+      - name: GCP Auth
+        if: needs.deploy-parse.outputs.cloud == 'gcp'
+        uses: ./actions/cloud-login
+        with:
+          provider: gcp
+          gcp_workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          gcp_service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: AWS Auth
+        if: needs.deploy-parse.outputs.cloud == 'aws'
+        uses: ./actions/cloud-login
+        with:
+          provider: aws
+          aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws_region: ${{ secrets.AWS_REGION }}
+
+      - name: Azure Auth
+        if: needs.deploy-parse.outputs.cloud == 'azure'
+        uses: ./actions/cloud-login
+        with:
+          provider: azure
+          azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Determine image tag
+        id: image
+        run: |
+          echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate deploy config
+        uses: ./actions/deploy-generate
+        id: generate
+        with:
+          environment: prod
+          docker_registry: ${{ inputs.docker_registry }}
+          image_tag: ${{ steps.image.outputs.tag }}
+
+      - name: Terraform Init
+        working-directory: .codehaven-deploy
+        env:
+          CLOUD: ${{ steps.generate.outputs.cloud }}
+        run: |
+          PREFIX="${{ steps.generate.outputs.team }}/${{ steps.generate.outputs.service_name }}/prod"
+          case "$CLOUD" in
+            gcp)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="prefix=${PREFIX}"
+              ;;
+            aws)
+              terraform init \
+                -backend-config="bucket=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="key=${PREFIX}/terraform.tfstate" \
+                -backend-config="region=${{ secrets.AWS_REGION }}"
+              ;;
+            azure)
+              terraform init \
+                -backend-config="storage_account_name=${{ secrets.DEPLOY_STATE_BUCKET }}" \
+                -backend-config="container_name=tfstate" \
+                -backend-config="key=${PREFIX}/terraform.tfstate"
+              ;;
+          esac
+
+      - name: Terraform Apply
+        working-directory: .codehaven-deploy
+        run: |
+          terraform apply -auto-approve -no-color 2>&1 | tee apply_output.txt
+
+      - name: Deployment Summary
+        if: always()
+        working-directory: .codehaven-deploy
+        run: |
+          URL=$(terraform output -raw url 2>/dev/null || echo "N/A")
+          REVISION=$(terraform output -raw latest_revision 2>/dev/null || echo "N/A")
+          {
+            echo "## 🚀 Deployed to PRODUCTION"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Service | \`${{ steps.generate.outputs.service_name }}\` |"
+            echo "| Project | \`${{ steps.generate.outputs.project_id }}\` |"
+            echo "| URL | \`$URL\` |"
+            echo "| Revision | \`$REVISION\` |"
+            echo "| Image | \`${{ inputs.docker_registry }}/${GITHUB_REPOSITORY}:${{ steps.image.outputs.tag }}\` |"
+            echo ""
+            echo "> ⚠️ **Destroy is never automated.** To tear down this service,"
+            echo "> use your cloud console or run \`terraform destroy\` manually."
+          } >> "$GITHUB_STEP_SUMMARY"

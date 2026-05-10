@@ -1,0 +1,22 @@
+team: ml-team
+cloud: gcp
+runtime: compute
+kind: service
+expose: private
+port: 5000
+region: us-central1
+project_id: my-project-dev
+machine_type: n2-standard-4
+zone: us-central1-a
+disk_size_gb: 50
+
+resources:
+  cpu: "4"
+  memory: 16Gi
+
+health:
+  path: /api/health
+
+env:
+  MODEL_PATH: /models/v2
+  GPU_ENABLED: "false"

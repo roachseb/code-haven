@@ -1,0 +1,23 @@
+team: platform
+cloud: azure
+runtime: container-apps
+kind: service
+expose: private
+port: 8080
+region: eastus
+resource_group: rg-platform-dev
+location: eastus
+
+resources:
+  cpu: "0.5"
+  memory: 1Gi
+
+replicas:
+  min: 1
+  max: 5
+
+health:
+  path: /health
+
+env:
+  ASPNETCORE_ENVIRONMENT: Development

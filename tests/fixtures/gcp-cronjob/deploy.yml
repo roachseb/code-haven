@@ -1,0 +1,19 @@
+team: data
+cloud: gcp
+runtime: cloud-run
+kind: cronjob
+region: us-central1
+project_id: my-project-dev
+schedule: "0 2 * * *"
+schedule_timezone: America/New_York
+
+resources:
+  cpu: "1"
+  memory: 1Gi
+
+timeout: 600
+max_retries: 2
+task_count: 1
+
+env:
+  REPORT_BUCKET: gs://reports-dev

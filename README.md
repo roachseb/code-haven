@@ -3,7 +3,7 @@
 > **One line to rule them all.** A zero-config, auto-detecting CI/CD pipeline system for GitHub Actions.
 > Drop your code, add one workflow line, and the pipeline figures out the rest.
 
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://roachseb.github.io/code-haven/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://code-haven.github.io/code-haven/)
 
 ---
 
@@ -21,7 +21,7 @@ on:
 
 jobs:
   ci:
-    uses: code-haven/.github/workflows/devsecops.yml@main
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
     secrets: inherit
 ```
 
@@ -71,12 +71,13 @@ Each sub-workflow is **50–130 lines**, focused on **one domain**. No more 1,40
 | Category | Jobs | Trigger |
 |----------|------|---------|
 | **☕ Java (Maven)** | Build, Format, Javadoc | `pom.xml` |
-| **🐘 Java (Gradle)** | Build, Javadoc | `build.gradle(.kts)` |
+| **☕ Java (Gradle)** | Build, Javadoc | `build.gradle(.kts)` |
 | **📦 Node.js** | Install, Build, Test | `package.json` |
 | **🅰 Angular** | Build, Test, Lint | `angular.json` |
 | **🐍 Python** | Build, Test, Tox, Django, MkDocs, PyPI | `setup.py` / `pyproject.toml` |
 | **🐹 Go** | Build, Test, Lint, Fmt, Vet | `*.go` files |
 | **🦀 Rust** | Build, Test, Fmt, Clippy, Doc | `Cargo.lock` |
+| **🔧 C/C++** | CMake, Test, clang-tidy, Conan | `CMakeLists.txt` |
 | **🔷 .NET** | Build, Test, Format, NuGet | `*.sln` / `*.csproj` |
 | **🐘 PHP** | Test, Twig Lint | `phpunit*` |
 | **🐳 Docker** | Build/Push, Hadolint, Trivy scan | `Dockerfile` |
@@ -85,6 +86,7 @@ Each sub-workflow is **50–130 lines**, focused on **one domain**. No more 1,40
 | **✨ Quality** | CodeClimate, SCC, Link check | Always |
 | **⎈ Helm** | Lint, Package/Push | `.helmignore` |
 | **📄 Pages** | Aggregate reports → deploy | Default branch |
+| **🚀 Deploy** | Terraform plan/apply (GCP, AWS, Azure) | `deploy.yml` |
 
 ---
 
@@ -92,12 +94,13 @@ Each sub-workflow is **50–130 lines**, focused on **one domain**. No more 1,40
 
 ```
 .github/workflows/
-├── devsecops.yml          # 🎯 Entry point — the orchestrator (~300 lines)
+├── devsecops.yml          # 🎯 Entry point — the orchestrator
 ├── _build-java.yml        # ☕ Maven + Gradle builds
 ├── _build-node.yml        # 📦 npm / Angular builds
 ├── _build-python.yml      # 🐍 Python / Django / MkDocs
 ├── _build-go.yml          # 🐹 Go build / test / lint
 ├── _build-rust.yml        # 🦀 Rust build / test / clippy
+├── _build-cpp.yml         # 🔧 C/C++ CMake / Conan
 ├── _build-dotnet.yml      # 🔷 .NET build / test / publish
 ├── _build-php.yml         # 🐘 PHP test / Twig lint
 ├── _docker.yml            # 🐳 Docker build + security scan
@@ -105,15 +108,24 @@ Each sub-workflow is **50–130 lines**, focused on **one domain**. No more 1,40
 ├── _security.yml          # 🛡 SAST + secrets + deps + IaC
 ├── _quality.yml           # ✨ Quality + metrics + links
 ├── _helm.yml              # ⎈ Helm lint + package
+├── _deploy.yml            # 🚀 Terraform plan / apply
 ├── _pages.yml             # 📄 Report aggregation + deploy
-├── _release.yml           # 🚀 Tag → Release + packaging + registry
-└── ci.yml                 # 🐕 Dog-fooding — this repo uses its own pipeline!
+├── _release.yml           # 🏷 Tag → Release + packaging
+└── ci.yml                 # 🐕 Dog-fooding — uses its own pipeline
 
 actions/
 ├── toolkit/               # 🔧 Environment init (CA certs, debug)
 ├── cloud-login/           # ☁️ AWS / Azure / GCP authentication
 ├── k8s-deploy/            # 🚀 Helm deployment with rollback
+├── ssh-deploy/            # 🔑 SSH deployment to VMs
+├── deploy-generate/       # 🏗 Intent → Terraform workspace generator
+├── cpp-package/           # 📦 Conan 2.x package build + upload
 └── code-quality/          # ✨ CodeClimate config generator
+
+modules/                   # 🏗 Terraform modules for intent-based deploy
+├── gcp/                   # Cloud Run, GKE, Compute, Cloud Run Job, Team IAM
+├── aws/                   # ECS Fargate
+└── azure/                 # Container Apps
 
 docs/                      # 📖 Full documentation site (MkDocs Material)
 examples/                  # 📝 Ready-to-use workflow examples
@@ -128,7 +140,7 @@ Override defaults when calling the workflow:
 ```yaml
 jobs:
   ci:
-    uses: code-haven/.github/workflows/devsecops.yml@main
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
     with:
       java_version: '17'
       python_version: '3.12'
@@ -170,6 +182,9 @@ All stacks can be disabled with `<stack>_disabled: true`:
 | [`actions/toolkit`](actions/toolkit) | Environment init — CA certs, debug, post-init scripts |
 | [`actions/cloud-login`](actions/cloud-login) | AWS / Azure / GCP OIDC authentication |
 | [`actions/k8s-deploy`](actions/k8s-deploy) | Helm deployment with auto-rollback |
+| [`actions/ssh-deploy`](actions/ssh-deploy) | SSH deployment to VMs / bare metal |
+| [`actions/deploy-generate`](actions/deploy-generate) | Intent → Terraform workspace generator |
+| [`actions/cpp-package`](actions/cpp-package) | Conan 2.x package build + upload |
 | [`actions/code-quality`](actions/code-quality) | Auto-generates `.codeclimate.yml` |
 
 ---

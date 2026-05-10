@@ -1,0 +1,327 @@
+# ═══════════════════════════════════════════════════════════════
+# Code Haven — Deploy Intent Generator
+#
+# Composite action that:
+#   1. Reads the developer's deploy.yml intent file
+#   2. Merges per-environment overrides (deploy.dev.yml, etc.)
+#   3. Copies the right Code Haven Terraform module
+#   4. Generates terraform.auto.tfvars.json from the merged intent
+#
+# The developer never writes Terraform.
+# They declare intent — Code Haven generates infrastructure.
+# ═══════════════════════════════════════════════════════════════
+
+name: Generate Deploy Config
+description: >
+  Parse a deploy.yml intent file and generate a Terraform workspace
+  using Code Haven's pre-built modules. Developers declare what they
+  want — Code Haven handles the Terraform.
+
+inputs:
+  environment:
+    description: 'Target environment (dev, staging, prod)'
+    required: true
+  docker_registry:
+    description: 'Container registry URL'
+    required: false
+    default: 'ghcr.io'
+  image_tag:
+    description: 'Container image tag to deploy'
+    required: true
+
+outputs:
+  team:
+    description: 'Team name from deploy.yml'
+    value: ${{ steps.generate.outputs.team }}
+  service_name:
+    description: 'Service name (derived from repo name)'
+    value: ${{ steps.generate.outputs.service_name }}
+  cloud:
+    description: 'Cloud provider'
+    value: ${{ steps.generate.outputs.cloud }}
+  runtime:
+    description: 'Deployment runtime'
+    value: ${{ steps.generate.outputs.runtime }}
+  kind:
+    description: 'Service kind'
+    value: ${{ steps.generate.outputs.kind }}
+  project_id:
+    description: 'Cloud project ID for this environment'
+    value: ${{ steps.generate.outputs.project_id }}
+  deploy_dir:
+    description: 'Path to the generated Terraform workspace'
+    value: '.codehaven-deploy'
+  services_json:
+    description: 'JSON array of service names (for multi-service repos). Single service = ["default"]'
+    value: ${{ steps.generate.outputs.services_json }}
+  is_multi_service:
+    description: 'Whether this is a multi-service deploy'
+    value: ${{ steps.generate.outputs.is_multi_service }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install yq
+      shell: bash
+      run: |
+        if ! command -v yq &>/dev/null; then
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+        fi
+
+    - name: Parse and merge intent
+      id: parse
+      shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        FILE=""
+        [[ -f "deploy.yml" ]] && FILE="deploy.yml"
+        [[ -f ".codehaven/deploy.yml" ]] && FILE=".codehaven/deploy.yml"
+
+        if [[ -z "$FILE" ]]; then
+          echo "::error::No deploy.yml found (checked root and .codehaven/)"
+          exit 1
+        fi
+        echo "deploy_file=$FILE" >> "$GITHUB_OUTPUT"
+
+        DIR=$(dirname "$FILE")
+        BASE=$(basename "$FILE" .yml)
+        ENV_FILE="${DIR}/${BASE}.${ENVIRONMENT}.yml"
+
+        TMPMERGED=$(mktemp)
+        if [[ -f "$ENV_FILE" ]]; then
+          echo "Merging $FILE + $ENV_FILE"
+          yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' "$FILE" "$ENV_FILE" > "$TMPMERGED"
+        else
+          echo "No override at $ENV_FILE — using base"
+          cp "$FILE" "$TMPMERGED"
+        fi
+        echo "merged_file=$TMPMERGED" >> "$GITHUB_OUTPUT"
+
+    - name: Extract intent values
+      id: generate
+      shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+        DOCKER_REGISTRY: ${{ inputs.docker_registry }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        ACTION_PATH: ${{ github.action_path }}
+        MERGED_FILE: ${{ steps.parse.outputs.merged_file }}
+      run: |
+        M="$MERGED_FILE"
+
+        KIND=$(yq '.kind // "service"' "$M")
+        CLOUD=$(yq '.cloud // ""' "$M")
+        RUNTIME=$(yq '.runtime // ""' "$M")
+        TEAM=$(yq '.team // "default"' "$M")
+        PROJECT_ID=$(yq '.project_id // ""' "$M")
+        REGION=$(yq '.region // "us-central1"' "$M")
+        PORT=$(yq '.port // 8080' "$M")
+        CPU=$(yq '.resources.cpu // "1"' "$M")
+        MEMORY=$(yq '.resources.memory // "512Mi"' "$M")
+        MIN=$(yq '.replicas.min // 1' "$M")
+        MAX=$(yq '.replicas.max // 5' "$M")
+        EXPOSE=$(yq '.expose // "private"' "$M")
+        HEALTH=$(yq '.health.path // "/health"' "$M")
+        SA=$(yq '.service_account // ""' "$M")
+        TIMEOUT=$(yq '.timeout // 300' "$M")
+        CONCURRENCY=$(yq '.concurrency // 80' "$M")
+        VPC=$(yq '.vpc_connector // ""' "$M")
+        ENV_VARS=$(yq -o=json '.env // {}' "$M")
+
+        # AWS-specific
+        VPC_ID=$(yq '.vpc_id // ""' "$M")
+        SUBNET_IDS=$(yq -o=json '.subnet_ids // []' "$M")
+        EXECUTION_ROLE_ARN=$(yq '.execution_role_arn // ""' "$M")
+        TASK_ROLE_ARN=$(yq '.task_role_arn // ""' "$M")
+
+        # Azure-specific
+        RESOURCE_GROUP=$(yq '.resource_group // ""' "$M")
+        LOCATION=$(yq '.location // ""' "$M")
+        MANAGED_ENV_ID=$(yq '.managed_environment_id // ""' "$M")
+        LOG_ANALYTICS_ID=$(yq '.log_analytics_workspace_id // ""' "$M")
+
+        # GKE-specific
+        CLUSTER_NAME=$(yq '.cluster_name // ""' "$M")
+        NAMESPACE=$(yq '.namespace // "default"' "$M")
+
+        # Compute-specific
+        MACHINE_TYPE=$(yq '.machine_type // "e2-small"' "$M")
+        ZONE=$(yq '.zone // ""' "$M")
+        NETWORK=$(yq '.network // "default"' "$M")
+        SUBNETWORK=$(yq '.subnetwork // ""' "$M")
+        DISK_SIZE=$(yq '.disk_size_gb // 10' "$M")
+
+        # Job/CronJob-specific
+        SCHEDULE=$(yq '.schedule // ""' "$M")
+        SCHEDULE_TIMEZONE=$(yq '.schedule_timezone // "UTC"' "$M")
+        PARALLELISM=$(yq '.parallelism // 1' "$M")
+        TASK_COUNT=$(yq '.task_count // 1' "$M")
+        MAX_RETRIES=$(yq '.max_retries // 3' "$M")
+
+        SERVICE_NAME="${GITHUB_REPOSITORY##*/}"
+        IMAGE="${DOCKER_REGISTRY}/${GITHUB_REPOSITORY}:${IMAGE_TAG}"
+
+        # Validate
+        ERRORS=0
+        [[ -z "$CLOUD" || "$CLOUD" == "null" ]] && echo "::error::'cloud' is required in deploy.yml" && ERRORS=$((ERRORS+1))
+        [[ -z "$RUNTIME" || "$RUNTIME" == "null" ]] && echo "::error::'runtime' is required in deploy.yml" && ERRORS=$((ERRORS+1))
+        [[ -z "$PROJECT_ID" || "$PROJECT_ID" == "null" ]] && echo "::error::'project_id' is required (set in deploy.${ENVIRONMENT}.yml)" && ERRORS=$((ERRORS+1))
+        [[ $ERRORS -gt 0 ]] && exit 1
+
+        # Resolve module and template
+        MODULES_ROOT="${ACTION_PATH}/../../modules"
+        TEMPLATES_ROOT="${ACTION_PATH}/templates"
+
+        # Map kind to runtime override for workers/cronjobs
+        if [[ "$KIND" == "worker" || "$KIND" == "cronjob" ]]; then
+          case "${CLOUD}" in
+            gcp) RUNTIME="cloud-run-job" ;;
+            *)
+              echo "::error::Worker/CronJob kind is only supported on GCP (Cloud Run Jobs) for now"
+              exit 1
+              ;;
+          esac
+        fi
+
+        case "${CLOUD}-${RUNTIME}" in
+          gcp-cloud-run)
+            MODULE_SRC="${MODULES_ROOT}/gcp/cloud-run"
+            TEMPLATE="${TEMPLATES_ROOT}/gcp-cloud-run.tf"
+            ;;
+          gcp-cloud-run-job)
+            MODULE_SRC="${MODULES_ROOT}/gcp/cloud-run-job"
+            TEMPLATE="${TEMPLATES_ROOT}/gcp-cloud-run-job.tf"
+            ;;
+          gcp-gke)
+            MODULE_SRC="${MODULES_ROOT}/gcp/gke"
+            TEMPLATE="${TEMPLATES_ROOT}/gcp-gke.tf"
+            ;;
+          gcp-compute)
+            MODULE_SRC="${MODULES_ROOT}/gcp/compute"
+            TEMPLATE="${TEMPLATES_ROOT}/gcp-compute.tf"
+            ;;
+          aws-ecs)
+            MODULE_SRC="${MODULES_ROOT}/aws/ecs"
+            TEMPLATE="${TEMPLATES_ROOT}/aws-ecs.tf"
+            ;;
+          azure-container-apps)
+            MODULE_SRC="${MODULES_ROOT}/azure/container-apps"
+            TEMPLATE="${TEMPLATES_ROOT}/azure-container-apps.tf"
+            ;;
+          *)
+            echo "::error::Unsupported cloud/runtime: ${CLOUD}/${RUNTIME}. Supported: gcp/cloud-run, gcp/gke, gcp/compute, gcp/cloud-run-job, aws/ecs, azure/container-apps"
+            exit 1
+            ;;
+        esac
+
+        # ── Check for multi-service pattern ─────────────
+        SVC_COUNT=$(yq '.services | length // 0' "$M")
+
+        if [[ "$SVC_COUNT" -gt 0 ]]; then
+          echo "Multi-service deploy detected: $SVC_COUNT services"
+          IS_MULTI="true"
+          DEPLOY_DIR=".codehaven-deploy"
+          rm -rf "$DEPLOY_DIR"
+          SVC_NAMES="[]"
+
+          for i in $(seq 0 $((SVC_COUNT - 1))); do
+            SVC_NAME=$(yq ".services[$i].name" "$M")
+            SVC_PORT=$(yq ".services[$i].port // $PORT" "$M")
+            SVC_KIND=$(yq ".services[$i].kind // \"$KIND\"" "$M")
+            SVC_CPU=$(yq ".services[$i].resources.cpu // \"$CPU\"" "$M")
+            SVC_MEM=$(yq ".services[$i].resources.memory // \"$MEMORY\"" "$M")
+            SVC_ENV=$(yq -o=json ".services[$i].env // {}" "$M")
+            SVC_HEALTH=$(yq ".services[$i].health.path // \"$HEALTH\"" "$M")
+            SVC_EXPOSE=$(yq ".services[$i].expose // \"$EXPOSE\"" "$M")
+            SVC_MIN=$(yq ".services[$i].replicas.min // $MIN" "$M")
+            SVC_MAX=$(yq ".services[$i].replicas.max // $MAX" "$M")
+            SVC_IMAGE="${DOCKER_REGISTRY}/${GITHUB_REPOSITORY}/${SVC_NAME}:${IMAGE_TAG}"
+
+            # Inherit cloud/runtime from root, allow per-service override
+            SVC_CLOUD=$(yq ".services[$i].cloud // \"$CLOUD\"" "$M")
+            SVC_RUNTIME=$(yq ".services[$i].runtime // \"$RUNTIME\"" "$M")
+
+            # Resolve module for this service
+            SVC_RT="$SVC_RUNTIME"
+            if [[ "$SVC_KIND" == "worker" || "$SVC_KIND" == "cronjob" ]]; then
+              [[ "$SVC_CLOUD" == "gcp" ]] && SVC_RT="cloud-run-job"
+            fi
+
+            case "${SVC_CLOUD}-${SVC_RT}" in
+              gcp-cloud-run)        MOD="${MODULES_ROOT}/gcp/cloud-run";       TPL="${TEMPLATES_ROOT}/gcp-cloud-run.tf" ;;
+              gcp-cloud-run-job)    MOD="${MODULES_ROOT}/gcp/cloud-run-job";   TPL="${TEMPLATES_ROOT}/gcp-cloud-run-job.tf" ;;
+              gcp-gke)              MOD="${MODULES_ROOT}/gcp/gke";             TPL="${TEMPLATES_ROOT}/gcp-gke.tf" ;;
+              gcp-compute)          MOD="${MODULES_ROOT}/gcp/compute";         TPL="${TEMPLATES_ROOT}/gcp-compute.tf" ;;
+              aws-ecs)              MOD="${MODULES_ROOT}/aws/ecs";             TPL="${TEMPLATES_ROOT}/aws-ecs.tf" ;;
+              azure-container-apps) MOD="${MODULES_ROOT}/azure/container-apps"; TPL="${TEMPLATES_ROOT}/azure-container-apps.tf" ;;
+              *) echo "::error::Service '$SVC_NAME': unsupported ${SVC_CLOUD}/${SVC_RT}"; exit 1 ;;
+            esac
+
+            SVC_DIR="${DEPLOY_DIR}/${SVC_NAME}"
+            mkdir -p "$SVC_DIR"
+            cp -r "$MOD" "$SVC_DIR/module"
+            cp "$TPL" "$SVC_DIR/main.tf"
+
+            # Generate tfvars for this service
+            export SERVICE_NAME="$SVC_NAME" IMAGE="$SVC_IMAGE"
+            export PORT="$SVC_PORT" CPU="$SVC_CPU" MEMORY="$SVC_MEM"
+            export MIN_INSTANCES="$SVC_MIN" MAX_INSTANCES="$SVC_MAX"
+            export EXPOSE="$SVC_EXPOSE" HEALTH_PATH="$SVC_HEALTH"
+            export ENV_VARS="$SVC_ENV" CLOUD="$SVC_CLOUD" RUNTIME="$SVC_RT"
+            bash "${ACTION_PATH}/scripts/generate-tfvars.sh" > "$SVC_DIR/terraform.auto.tfvars.json"
+
+            SVC_NAMES=$(echo "$SVC_NAMES" | jq --arg n "$SVC_NAME" '. + [$n]')
+            echo "  ✅ Generated workspace for service: $SVC_NAME"
+          done
+
+          echo "services_json=$(echo "$SVC_NAMES" | jq -c .)" >> "$GITHUB_OUTPUT"
+        else
+          IS_MULTI="false"
+
+          # Build single-service deploy workspace
+          [[ ! -d "$MODULE_SRC" ]] && echo "::error::Module not found at $MODULE_SRC" && exit 1
+          [[ ! -f "$TEMPLATE" ]] && echo "::error::Template not found at $TEMPLATE" && exit 1
+
+          DEPLOY_DIR=".codehaven-deploy"
+          rm -rf "$DEPLOY_DIR"
+          mkdir -p "$DEPLOY_DIR"
+          cp -r "$MODULE_SRC" "$DEPLOY_DIR/module"
+          cp "$TEMPLATE" "$DEPLOY_DIR/main.tf"
+
+          # Generate terraform.auto.tfvars.json via script
+          export SERVICE_NAME PROJECT_ID REGION IMAGE PORT CPU MEMORY
+          export MIN_INSTANCES="$MIN" MAX_INSTANCES="$MAX"
+          export EXPOSE HEALTH_PATH="$HEALTH" SERVICE_ACCOUNT="$SA"
+          export TIMEOUT CONCURRENCY VPC_CONNECTOR="$VPC" TEAM ENV_VARS
+          export CLOUD RUNTIME KIND
+          # AWS
+          export VPC_ID SUBNET_IDS EXECUTION_ROLE_ARN TASK_ROLE_ARN
+          # Azure
+          export RESOURCE_GROUP LOCATION MANAGED_ENV_ID LOG_ANALYTICS_ID
+          # GKE
+          export CLUSTER_NAME NAMESPACE
+          # Compute
+          export MACHINE_TYPE ZONE NETWORK SUBNETWORK DISK_SIZE
+          # Job/CronJob
+          export SCHEDULE SCHEDULE_TIMEZONE PARALLELISM TASK_COUNT MAX_RETRIES
+          bash "${ACTION_PATH}/scripts/generate-tfvars.sh" > "$DEPLOY_DIR/terraform.auto.tfvars.json"
+
+          echo "Generated $DEPLOY_DIR/main.tf + terraform.auto.tfvars.json"
+          cat "$DEPLOY_DIR/terraform.auto.tfvars.json"
+
+          echo 'services_json=["default"]' >> "$GITHUB_OUTPUT"
+        fi
+
+        # Outputs
+        {
+          echo "team=$TEAM"
+          echo "service_name=${GITHUB_REPOSITORY##*/}"
+          echo "cloud=$CLOUD"
+          echo "runtime=$RUNTIME"
+          echo "kind=$KIND"
+          echo "project_id=$PROJECT_ID"
+          echo "is_multi_service=$IS_MULTI"
+        } >> "$GITHUB_OUTPUT"

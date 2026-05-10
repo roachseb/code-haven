@@ -5,7 +5,12 @@
 
 ## Overview
 
-The C/C++ workflow provides a complete build, test, lint, format, and package pipeline using industry-standard tools. It supports CMake and Meson build systems with Conan 2.x for dependency management.
+The C/C++ workflow provides a complete build, test, lint, format, and package pipeline using industry-standard tools. It supports CMake with Conan 2.x for dependency management.
+
+**Developer responsibility:** `CMakeLists.txt` + `conanfile.txt`/`conanfile.py` + `ci.yml` (4 lines of intent).  
+**Code Haven responsibility:** Builder images, tool installation, CI orchestration, registry management.
+
+All tool installation steps are conditional — if running inside a Code Haven builder image or a self-hosted runner with tools pre-installed, install steps are skipped automatically.
 
 ## Jobs
 
@@ -29,21 +34,40 @@ The C/C++ workflow provides a complete build, test, lint, format, and package pi
 ## Configuration
 
 ```yaml
-with:
-  # ── C/C++ Settings ────────────────────────────
-  cpp_compiler: 'gcc'             # gcc, clang
-  cpp_compiler_version: '13'      # GCC 13, Clang 17, etc.
-  cpp_standard: '20'              # C++ standard: 14, 17, 20, 23
-  cpp_build_type: 'Release'       # Release, Debug, RelWithDebInfo, MinSizeRel
-  cpp_build_system: 'cmake'       # cmake, meson
-  cpp_package_manager: 'conan'    # conan, vcpkg, none
-  cpp_conan_remote: ''            # Custom Conan remote URL
-  cpp_conan_login_username: ''    # Conan remote username (use secrets)
-  cpp_test_framework: 'ctest'     # ctest, gtest, catch2
-  cpp_coverage_enabled: true      # Generate lcov/gcov coverage
-  cpp_cross_compile: ''           # Target triple (e.g., aarch64-linux-gnu)
-  cpp_disabled: false             # Disable C/C++ pipeline entirely
+jobs:
+  ci:
+    uses: code-haven/code-haven/.github/workflows/devsecops.yml@main
+    with:
+      # ── C/C++ Intent (the only thing developers configure) ──
+      cpp_compiler: 'gcc'             # gcc | clang
+      cpp_compiler_version: '13'      # Compiler version to install
+      cpp_standard: '20'              # C++ standard: 14, 17, 20, 23
+      cpp_build_type: 'Release'       # Release, Debug, RelWithDebInfo
+      cpp_conan_remote: ${{ vars.CONAN_REMOTE_URL }}  # Org-level variable
+      cpp_coverage_enabled: false     # Enable gcov/lcov coverage
+    secrets: inherit
 ```
+
+The Conan remote URL is typically set as an **org-level variable** (`CONAN_REMOTE_URL`) so developers reference it as `${{ vars.CONAN_REMOTE_URL }}` without knowing the actual URL.
+
+## Builder Images
+
+Code Haven publishes pre-built Docker images to GHCR with all C++ tooling pre-installed:
+
+| Image | Contents |
+|-------|----------|
+| `ghcr.io/<org>/code-haven/cpp-builder:gcc13` | Ubuntu 24.04 + GCC 13 + CMake + Conan 2.x |
+| `ghcr.io/<org>/code-haven/cpp-builder:gcc14` | Ubuntu 24.04 + GCC 14 + CMake + Conan 2.x |
+| `ghcr.io/<org>/code-haven/cpp-builder:clang16` | Ubuntu 24.04 + Clang 16 + CMake + Conan 2.x |
+| `ghcr.io/<org>/code-haven/cpp-builder:clang18` | Ubuntu 24.04 + Clang 18 + CMake + Conan 2.x |
+
+These images are:
+- **Used in CI** — when jobs run in a container, install steps are skipped (tools pre-exist)
+- **Used for local dev** — developers reference them in `docker-compose.yml` instead of building their own
+- **Built automatically** — the `_build-images.yml` workflow rebuilds on changes to `images/`
+
+The Dockerfile lives in `images/cpp-builder/Dockerfile` and accepts build args:
+`COMPILER` (gcc/clang), `COMPILER_VERSION`, `UBUNTU_VERSION`.
 
 ## Build Process
 
@@ -222,8 +246,8 @@ Each target uses a corresponding Conan profile for cross-compilation.
 
 ## Secrets
 
-| Secret | Required | Used by |
-|--------|----------|---------|
-| `CONAN_REMOTE_URL` | No | Conan package upload destination |
-| `CONAN_LOGIN_USERNAME` | No | Conan remote authentication |
-| `CONAN_LOGIN_PASSWORD` | No | Conan remote authentication |
+| Config | Type | Required | Purpose |
+|--------|------|----------|---------|
+| `CONAN_REMOTE_URL` | Variable (org/repo) | No | Conan package registry URL |
+| `CONAN_LOGIN_USERNAME` | Secret | No | Registry authentication |
+| `CONAN_PASSWORD` | Secret | No | Registry authentication (password or API key) |

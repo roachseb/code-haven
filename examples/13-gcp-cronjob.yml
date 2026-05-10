@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 13 — GCP CronJob (Scheduled Task)
+#
+# Nightly report generator running on a cron schedule.
+# Demonstrates: cronjob kind, schedule, Cloud Scheduler + Cloud Run Job.
+# ═══════════════════════════════════════════════════════════════
+
+kind: cronjob
+cloud: gcp
+runtime: cloud-run
+team: data
+region: us-central1
+
+schedule: "0 2 * * *"           # 2 AM daily
+schedule_timezone: America/New_York
+
+resources:
+  cpu: "1"
+  memory: 1Gi
+
+timeout: 600
+max_retries: 2
+task_count: 1
+
+env:
+  REPORT_TYPE: daily-summary
+  OUTPUT_BUCKET: gs://reports-dev

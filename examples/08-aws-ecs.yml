@@ -1,0 +1,36 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 08 — AWS ECS Fargate Service
+#
+# Node.js API deployed to AWS ECS behind an ALB.
+# Demonstrates: AWS cloud, ECS runtime, VPC/subnet config.
+# ═══════════════════════════════════════════════════════════════
+#
+# Required repo structure:
+#   ├── src/
+#   ├── Dockerfile
+#   ├── deploy.yml           ← this file
+#   ├── deploy.dev.yml       ← per-env overrides
+#   └── deploy.prod.yml
+# ═══════════════════════════════════════════════════════════════
+
+kind: service
+cloud: aws
+runtime: ecs
+team: platform
+port: 3000
+expose: public
+
+resources:
+  cpu: "512"     # Fargate CPU units (256, 512, 1024, 2048, 4096)
+  memory: "1024" # MiB
+
+replicas:
+  min: 2
+  max: 8
+
+health:
+  path: /health
+
+env:
+  NODE_ENV: production
+  LOG_FORMAT: json

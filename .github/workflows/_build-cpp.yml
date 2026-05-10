@@ -7,6 +7,10 @@
 # Formatting: clang-format
 # Testing: CTest (GoogleTest / Catch2)
 # Packaging: Conan create + upload
+#
+# Tool installation is conditional — if tools are already present
+# (e.g., running inside a Code Haven builder image or a
+# self-hosted runner), install steps are skipped automatically.
 # ═══════════════════════════════════════════════════════════════
 name: "⚙️ C/C++"
 
@@ -38,32 +42,64 @@ jobs:
 
       - name: Install build tools
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build ccache gcovr lcov
+          # Skip if tools are already present (e.g., Code Haven builder image)
+          NEED_INSTALL=false
+          for tool in cmake ninja gcovr; do
+            if ! command -v "$tool" &>/dev/null; then
+              NEED_INSTALL=true
+              break
+            fi
+          done
+
+          if [[ "$NEED_INSTALL" == "true" ]]; then
+            echo "📦 Installing build tools..."
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends \
+              cmake ninja-build ccache gcovr lcov
+          else
+            echo "✅ Build tools already available — skipping install"
+          fi
 
       - name: Install compiler
         run: |
+          VERSION="${{ inputs.cpp_compiler_version }}"
+
           if [[ "${{ inputs.cpp_compiler }}" == "clang" ]]; then
-            VERSION="${{ inputs.cpp_compiler_version }}"
             [[ -z "$VERSION" ]] && VERSION="16"
-            sudo apt-get install -y --no-install-recommends \
-              clang-${VERSION} libc++-${VERSION}-dev libc++abi-${VERSION}-dev
+            if ! command -v "clang-${VERSION}" &>/dev/null; then
+              echo "📦 Installing clang-${VERSION}..."
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends \
+                clang-${VERSION} libc++-${VERSION}-dev libc++abi-${VERSION}-dev
+            fi
             echo "CC=clang-${VERSION}" >> "$GITHUB_ENV"
             echo "CXX=clang++-${VERSION}" >> "$GITHUB_ENV"
           else
-            VERSION="${{ inputs.cpp_compiler_version }}"
             [[ -z "$VERSION" ]] && VERSION="13"
-            sudo apt-get install -y --no-install-recommends \
-              g++-${VERSION}
-            echo "CC=gcc-${VERSION}" >> "$GITHUB_ENV"
-            echo "CXX=g++-${VERSION}" >> "$GITHUB_ENV"
+            if ! command -v "g++-${VERSION}" &>/dev/null && ! command -v "g++" &>/dev/null; then
+              echo "📦 Installing g++-${VERSION}..."
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends \
+                g++-${VERSION}
+            fi
+            # Use versioned binary if available, else fall back to generic
+            if command -v "gcc-${VERSION}" &>/dev/null; then
+              echo "CC=gcc-${VERSION}" >> "$GITHUB_ENV"
+              echo "CXX=g++-${VERSION}" >> "$GITHUB_ENV"
+            else
+              echo "CC=gcc" >> "$GITHUB_ENV"
+              echo "CXX=g++" >> "$GITHUB_ENV"
+            fi
           fi
 
       - name: Setup Conan
         if: inputs.has_conan == 'true'
         run: |
-          pip install conan
+          # Install Conan if not present (pre-built images have it)
+          if ! command -v conan &>/dev/null; then
+            echo "📦 Installing Conan..."
+            pip install conan
+          fi
           conan profile detect --force
 
           # Configure compiler settings in default profile
@@ -71,8 +107,9 @@ jobs:
           sed -i "s/compiler.cppstd=.*/compiler.cppstd=${{ inputs.cpp_standard }}/" "$PROFILE_PATH" || true
 
           # Add remote if configured
-          if [[ -n "${{ inputs.cpp_conan_remote }}" ]]; then
-            conan remote add project "${{ inputs.cpp_conan_remote }}" --force
+          CONAN_REMOTE="${{ inputs.cpp_conan_remote }}"
+          if [[ -n "$CONAN_REMOTE" ]]; then
+            conan remote add project "$CONAN_REMOTE" --force
             if [[ -n "${{ secrets.CONAN_LOGIN_USERNAME }}" ]]; then
               conan remote login project "${{ secrets.CONAN_LOGIN_USERNAME }}" -p "${{ secrets.CONAN_PASSWORD }}"
             fi
@@ -192,14 +229,28 @@ jobs:
 
       - name: Install analysis tools
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build clang-tidy cppcheck
+          NEED_INSTALL=false
+          for tool in cmake clang-tidy cppcheck; do
+            if ! command -v "$tool" &>/dev/null; then
+              NEED_INSTALL=true
+              break
+            fi
+          done
+
+          if [[ "$NEED_INSTALL" == "true" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends \
+              cmake ninja-build clang-tidy cppcheck
+          else
+            echo "✅ Analysis tools already available"
+          fi
 
       - name: Setup Conan (for includes)
         if: inputs.has_conan == 'true'
         run: |
-          pip install conan
+          if ! command -v conan &>/dev/null; then
+            pip install conan
+          fi
           conan profile detect --force
           conan install . --output-folder=build --build=missing \
             -s build_type=${{ inputs.cpp_build_type }} \
@@ -308,8 +359,10 @@ jobs:
 
       - name: Install clang-format
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends clang-format
+          if ! command -v clang-format &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends clang-format
+          fi
 
       - name: Check formatting
         run: |
@@ -365,16 +418,21 @@ jobs:
 
       - name: Install build tools
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends cmake ninja-build
+          if ! command -v cmake &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends cmake ninja-build
+          fi
 
       - name: Setup Conan
         run: |
-          pip install conan
+          if ! command -v conan &>/dev/null; then
+            pip install conan
+          fi
           conan profile detect --force
 
-          if [[ -n "${{ inputs.cpp_conan_remote }}" ]]; then
-            conan remote add project "${{ inputs.cpp_conan_remote }}" --force
+          CONAN_REMOTE="${{ inputs.cpp_conan_remote }}"
+          if [[ -n "$CONAN_REMOTE" ]]; then
+            conan remote add project "$CONAN_REMOTE" --force
             if [[ -n "${{ secrets.CONAN_LOGIN_USERNAME }}" ]]; then
               conan remote login project "${{ secrets.CONAN_LOGIN_USERNAME }}" -p "${{ secrets.CONAN_PASSWORD }}"
             fi
@@ -422,8 +480,10 @@ jobs:
 
       - name: Install Doxygen
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends doxygen graphviz
+          if ! command -v doxygen &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends doxygen graphviz
+          fi
 
       - name: Generate docs
         run: |

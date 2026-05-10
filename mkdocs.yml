@@ -73,6 +73,8 @@ nav:
     - Go: workflows/go.md
     - Rust: workflows/rust.md
     - "C/C++": workflows/cpp.md
+    - Terraform / OpenTofu: workflows/terraform.md
+    - Deploy (Intent-Based): workflows/deploy.md
     - .NET: workflows/dotnet.md
     - PHP: workflows/php.md
     - Docker: workflows/docker.md
@@ -92,4 +94,6 @@ nav:
     - Branch Packaging: branch-packaging.md
     - Cross-Project Dependencies: cross-project-deps.md
   - Examples: examples.md
+  - Testing Guide: testing.md
+  - Troubleshooting: troubleshooting.md
   - Migration Guide: migration.md

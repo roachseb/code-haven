@@ -1,0 +1,38 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 10 — Python Flask backend deployed to GCP Cloud Run
+#
+# This shows the COMPLETE developer experience for intent-based
+# deployment. The developer writes:
+#
+#   .github/workflows/ci.yml (this file — 4 lines of config)
+#   Dockerfile              (standard container)
+#   deploy.yml              (intent: what to deploy)
+#   deploy.dev.yml          (dev environment overrides)
+#   deploy.staging.yml      (staging overrides)
+#   deploy.prod.yml         (production overrides)
+#
+# Code Haven handles EVERYTHING else:
+#   ✓ Detect stack (Python + Docker + deploy intent)
+#   ✓ Build & test + security scans
+#   ✓ Build & push container image
+#   ✓ Generate Terraform from deploy intent
+#   ✓ Plan all environments (PR feedback)
+#   ✓ Deploy to dev (on main push)
+#   ✓ Deploy to prod (on tag — with approval gate)
+#
+# The developer never writes Terraform.
+# ═══════════════════════════════════════════════════════════════
+name: CI/CD
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  ci:
+    uses: code-haven/.github/workflows/devsecops.yml@main
+    with:
+      python_version: '3.12'
+      deploy_auto_apply_staging: true
+    secrets: inherit

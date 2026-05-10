@@ -1,0 +1,28 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 09 — Azure Container Apps (.NET API)
+#
+# ASP.NET Core API deployed to Azure Container Apps.
+# Demonstrates: Azure cloud, Container Apps runtime.
+# ═══════════════════════════════════════════════════════════════
+
+kind: service
+cloud: azure
+runtime: container-apps
+team: dotnet-team
+port: 8080
+expose: private
+
+resources:
+  cpu: "0.5"
+  memory: 1Gi
+
+replicas:
+  min: 1
+  max: 5
+
+health:
+  path: /healthz
+
+env:
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_URLS: http://+:8080

@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-haven.dev/schemas/deploy.json",
+  "title": "Code Haven Deploy Intent",
+  "description": "Schema for deploy.yml — the intent file that tells Code Haven how to deploy your service.",
+  "type": "object",
+  "required": ["cloud", "runtime"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["service", "worker", "cronjob"],
+      "default": "service",
+      "description": "Service type. 'service' = long-running with ingress, 'worker' = background job, 'cronjob' = scheduled task."
+    },
+    "cloud": {
+      "type": "string",
+      "enum": ["gcp", "aws", "azure"],
+      "description": "Cloud provider."
+    },
+    "runtime": {
+      "type": "string",
+      "enum": ["cloud-run", "gke", "compute", "ecs", "container-apps"],
+      "description": "Deployment runtime."
+    },
+    "team": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "default": "default",
+      "description": "Team name — used for state isolation, labels, and IAM."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 8080
+    },
+    "expose": {
+      "type": "string",
+      "enum": ["private", "public"],
+      "default": "private"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Cloud project/account ID. Usually set per-environment."
+    },
+    "region": {
+      "type": "string",
+      "default": "us-central1"
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "cpu": { "type": "string", "description": "CPU allocation (format varies by runtime)" },
+        "memory": { "type": "string", "description": "Memory allocation (e.g., 512Mi, 1Gi)" }
+      },
+      "additionalProperties": false
+    },
+    "replicas": {
+      "type": "object",
+      "properties": {
+        "min": { "type": "integer", "minimum": 0, "default": 1 },
+        "max": { "type": "integer", "minimum": 1, "default": 5 }
+      },
+      "additionalProperties": false
+    },
+    "health": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "default": "/health" }
+      },
+      "additionalProperties": false
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Environment variables (non-secret). Key-value pairs."
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 300,
+      "description": "Request/task timeout in seconds."
+    },
+    "concurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 80,
+      "description": "Max concurrent requests per instance (Cloud Run only)."
+    },
+    "service_account": {
+      "type": "string",
+      "description": "Service account email for runtime identity."
+    },
+    "vpc_connector": {
+      "type": "string",
+      "description": "VPC Access connector name (GCP only)."
+    },
+    "cluster_name": {
+      "type": "string",
+      "description": "GKE cluster name (required for gke runtime)."
+    },
+    "namespace": {
+      "type": "string",
+      "default": "default",
+      "description": "Kubernetes namespace (gke runtime)."
+    },
+    "machine_type": {
+      "type": "string",
+      "default": "e2-small",
+      "description": "VM machine type (compute runtime)."
+    },
+    "zone": {
+      "type": "string",
+      "description": "Compute zone (compute runtime)."
+    },
+    "network": {
+      "type": "string",
+      "default": "default",
+      "description": "VPC network name (compute runtime)."
+    },
+    "subnetwork": {
+      "type": "string",
+      "description": "VPC subnetwork (compute runtime)."
+    },
+    "disk_size_gb": {
+      "type": "integer",
+      "minimum": 10,
+      "default": 10,
+      "description": "Boot disk size in GB (compute runtime)."
+    },
+    "schedule": {
+      "type": "string",
+      "description": "Cron expression for cronjob kind (e.g., '0 2 * * *')."
+    },
+    "schedule_timezone": {
+      "type": "string",
+      "default": "UTC",
+      "description": "Timezone for cron schedule."
+    },
+    "parallelism": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Parallel tasks (worker/cronjob)."
+    },
+    "task_count": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Total tasks per execution (worker/cronjob)."
+    },
+    "max_retries": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3,
+      "description": "Retry count on failure (worker/cronjob)."
+    },
+    "vpc_id": {
+      "type": "string",
+      "description": "AWS VPC ID (required for ecs runtime)."
+    },
+    "subnet_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "AWS subnet IDs (required for ecs runtime)."
+    },
+    "execution_role_arn": {
+      "type": "string",
+      "description": "ECS execution IAM role ARN."
+    },
+    "task_role_arn": {
+      "type": "string",
+      "description": "ECS task IAM role ARN."
+    },
+    "resource_group": {
+      "type": "string",
+      "description": "Azure resource group name (required for container-apps runtime)."
+    },
+    "location": {
+      "type": "string",
+      "description": "Azure region (falls back to region)."
+    },
+    "managed_environment_id": {
+      "type": "string",
+      "description": "Existing Container Apps managed environment ID."
+    },
+    "log_analytics_workspace_id": {
+      "type": "string",
+      "description": "Existing Log Analytics workspace ID."
+    },
+    "services": {
+      "type": "array",
+      "description": "Multi-service pattern. Each entry is a service with its own workspace.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Service name (used for image tag and state path)."
+          },
+          "kind": { "type": "string", "enum": ["service", "worker", "cronjob"] },
+          "cloud": { "type": "string", "enum": ["gcp", "aws", "azure"] },
+          "runtime": { "type": "string", "enum": ["cloud-run", "gke", "compute", "ecs", "container-apps"] },
+          "port": { "type": "integer" },
+          "expose": { "type": "string", "enum": ["private", "public"] },
+          "resources": {
+            "type": "object",
+            "properties": {
+              "cpu": { "type": "string" },
+              "memory": { "type": "string" }
+            }
+          },
+          "replicas": {
+            "type": "object",
+            "properties": {
+              "min": { "type": "integer" },
+              "max": { "type": "integer" }
+            }
+          },
+          "health": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" }
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "timeout": { "type": "integer" },
+          "schedule": { "type": "string" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "cloud": { "const": "aws" }, "runtime": { "const": "ecs" } }
+      },
+      "then": {
+        "required": ["vpc_id", "subnet_ids"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "cloud": { "azure" : {} }, "runtime": { "const": "container-apps" } }
+      },
+      "then": {
+        "required": ["resource_group"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "runtime": { "const": "gke" } }
+      },
+      "then": {
+        "required": ["cluster_name"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "kind": { "const": "cronjob" } }
+      },
+      "then": {
+        "required": ["schedule"]
+      }
+    }
+  ],
+  "additionalProperties": false
+}

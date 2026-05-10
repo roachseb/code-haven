@@ -1,0 +1,60 @@
+# ═══════════════════════════════════════════════════════════════
+# Example 14 — Multi-Service Repository
+#
+# A repo with API + Worker + Web frontend, all deployed from
+# a single deploy.yml using the services array.
+#
+# Each service gets its own container, Terraform workspace,
+# and independent scaling.
+#
+# Container images are tagged as:
+#   ghcr.io/org/repo/api:sha-abc1234
+#   ghcr.io/org/repo/worker:sha-abc1234
+#   ghcr.io/org/repo/web:sha-abc1234
+# ═══════════════════════════════════════════════════════════════
+
+team: platform
+cloud: gcp
+runtime: cloud-run
+region: us-central1
+
+services:
+  - name: api
+    port: 8080
+    expose: public
+    resources:
+      cpu: "1"
+      memory: 512Mi
+    replicas:
+      min: 2
+      max: 10
+    health:
+      path: /api/health
+    env:
+      SERVICE_ROLE: api
+      LOG_LEVEL: info
+
+  - name: worker
+    kind: worker
+    resources:
+      cpu: "2"
+      memory: 1Gi
+    timeout: 900
+    env:
+      SERVICE_ROLE: worker
+      QUEUE: projects/my-project/subscriptions/tasks
+
+  - name: web
+    port: 3000
+    expose: public
+    resources:
+      cpu: "0.5"
+      memory: 256Mi
+    replicas:
+      min: 1
+      max: 5
+    health:
+      path: /
+    env:
+      SERVICE_ROLE: web
+      API_URL: https://api.internal

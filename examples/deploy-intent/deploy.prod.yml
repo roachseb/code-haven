@@ -1,0 +1,15 @@
+# deploy.prod.yml — Production environment overrides
+
+project_id: myorg-prod-345678
+region: northamerica-northeast1
+
+replicas:
+  min: 3
+  max: 10
+
+resources:
+  cpu: "2"
+  memory: 1Gi
+
+env:
+  LOG_LEVEL: warn

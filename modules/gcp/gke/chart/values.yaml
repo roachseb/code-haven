@@ -1,0 +1,26 @@
+image: ""
+port: 8080
+replicaCount: 1
+healthCheckPath: /health
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+
+serviceAccount:
+  gcpEmail: ""
+
+env: {}

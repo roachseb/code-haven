@@ -1,0 +1,23 @@
+team: platform
+cloud: gcp
+runtime: cloud-run
+kind: service
+expose: private
+port: 8080
+region: us-central1
+project_id: my-project-dev
+
+resources:
+  cpu: "1"
+  memory: 512Mi
+
+replicas:
+  min: 1
+  max: 5
+
+health:
+  path: /health
+
+env:
+  LOG_LEVEL: debug
+  DB_HOST: db.internal

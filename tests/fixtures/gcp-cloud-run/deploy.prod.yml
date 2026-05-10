@@ -1,0 +1,13 @@
+project_id: my-project-prod
+region: europe-west1
+
+resources:
+  cpu: "2"
+  memory: 1Gi
+
+replicas:
+  min: 3
+  max: 20
+
+env:
+  LOG_LEVEL: warn

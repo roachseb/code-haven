@@ -1,0 +1,18 @@
+team: data
+cloud: gcp
+runtime: cloud-run
+kind: worker
+region: us-central1
+project_id: my-project-dev
+
+resources:
+  cpu: "2"
+  memory: 2Gi
+
+timeout: 900
+max_retries: 3
+parallelism: 1
+task_count: 1
+
+env:
+  QUEUE_URL: projects/my-project/subscriptions/work-queue
