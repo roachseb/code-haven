@@ -157,6 +157,13 @@ for runtime in "${!RUNTIMES[@]}"; do
   # Generate tfvars
   set_tfvars_env
   export CLOUD="$TCLOUD" RUNTIME="$TRUNTIME"
+
+  # Runtime-specific overrides (AWS uses numeric cpu/memory, Azure uses numeric cpu)
+  case "$runtime" in
+    aws-ecs) export CPU="512" MEMORY="1024" ;;
+    azure-container-apps) export CPU="1" MEMORY="1Gi" ;;
+  esac
+
   OUT="$TMPDIR/${runtime}.json"
   bash "$TFVARS_SCRIPT" > "$OUT" 2>/dev/null
 
