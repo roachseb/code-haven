@@ -23,7 +23,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
           cache: pip
@@ -32,10 +32,10 @@ jobs:
           pip install --upgrade pip build
           [[ -f requirements.txt ]] && pip install -r requirements.txt || true
           python -m build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: python-dist, path: dist, retention-days: 1 }
       - name: Upload Docker inputs (Python)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-input-python
           path: dist/**
@@ -50,7 +50,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
           cache: pip
@@ -86,7 +86,7 @@ jobs:
             echo "### Coverage"
             coverage report --format=markdown 2>/dev/null || echo "- Coverage data unavailable"
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: python-coverage
@@ -115,7 +115,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
           cache: pip
@@ -129,7 +129,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
           cache: pip
@@ -146,13 +146,13 @@ jobs:
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: '3.x', cache: pip }
       - name: Build docs
         run: |
           if [[ -f requirements.txt ]]; then pip install -r requirements.txt; else pip install mkdocs-material; fi
           mkdocs build --strict --verbose --site-dir mkdocs-site
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: mkdocs-site, path: mkdocs-site, retention-days: 7 }
 
   # ── PyPI Publish ─────────────────────────────────────────

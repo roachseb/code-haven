@@ -35,7 +35,7 @@ jobs:
           cache: maven
       - name: Maven Build
         run: mvn ${{ inputs.maven_cli_opts }} ${{ inputs.maven_build_cmd }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: maven-target
           path: |
@@ -52,7 +52,7 @@ jobs:
             **/target/dependency-check-*
           retention-days: 1
       - name: Upload Docker inputs (Java/Maven)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-input-java
           path: |
@@ -135,7 +135,7 @@ jobs:
           java-version: ${{ inputs.java_version }}
           cache: maven
       - run: mvn ${{ inputs.maven_cli_opts }} javadoc:javadoc -DskipTests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: javadoc
           path: '**/target/site/apidocs'
@@ -155,7 +155,7 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: gradle ${{ inputs.gradle_build_cmd }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: gradle-build
           path: |
@@ -165,7 +165,7 @@ jobs:
             **/build/docs
           retention-days: 1
       - name: Upload Docker inputs (Java/Gradle)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-input-gradle
           path: |
@@ -202,7 +202,7 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: gradle javadoc
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: gradle-javadoc
           path: '**/build/docs/javadoc'

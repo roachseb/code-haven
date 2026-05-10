@@ -35,7 +35,7 @@ jobs:
       - name: Publish for Docker
         run: dotnet publish --no-build --configuration Release -o publish
       - name: Upload Docker inputs (.NET)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-input-dotnet
           path: publish/**
@@ -84,7 +84,7 @@ jobs:
               echo "- ⚠️ No test results found"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: dotnet-results

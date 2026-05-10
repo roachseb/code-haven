@@ -41,7 +41,7 @@ jobs:
           install: true
         env:
           CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: cypress-${{ matrix.browser }}
@@ -68,7 +68,7 @@ jobs:
           npx playwright test --reporter=html,junit,list
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: playwright-results.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: playwright-report
@@ -106,7 +106,7 @@ jobs:
             --report-html hurl-report \
             --report-junit hurl-results.xml \
             ${{ inputs.hurl_extra_args }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: hurl-report

@@ -33,7 +33,7 @@ jobs:
             --coverage-text \
             --coverage-cobertura=php-reports/cobertura.xml \
             --log-junit=php-reports/junit.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with: { name: php-reports, path: php-reports, retention-days: 7 }
       - name: Summary

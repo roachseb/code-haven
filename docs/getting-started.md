@@ -276,7 +276,7 @@ Create multiple small workflow files in `.github/workflows/`:
 Each is independently clickable with isolated run history. No disable flags needed.
 
 !!! tip "Full templates"
-    See [`examples/segmented/`](https://github.com/roachseb/code-haven/tree/main/examples/segmented) for ready-to-copy workflow files with comments.
+    See [`examples/segmented/`](https://github.com/roachseb/code-haven/tree/feat/cpp/examples/segmented) for ready-to-copy workflow files with comments.
 
 ---
 

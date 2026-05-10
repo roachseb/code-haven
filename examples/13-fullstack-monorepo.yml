@@ -39,16 +39,7 @@ jobs:
       node_version: '20'
       node_build_args: 'run build'
       node_test_args: 'run test'
-      # Monorepo: disable Code Haven's Docker (we do per-service below)
-      docker_disabled: true
-      maven_disabled: true
-      gradle_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
-      cpp_disabled: true
+      docker_disabled: true      # Monorepo: per-service Docker below
     secrets: inherit
 
   # ── Detect which packages changed ──────────────────────────

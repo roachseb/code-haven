@@ -25,7 +25,7 @@ on:
       docker_registry:   { type: string,  default: 'ghcr.io' }
     secrets:
       CONAN_LOGIN_USERNAME: { required: false }
-      CONAN_PASSWORD:       { required: false }
+      CONAN_PASSWORD:       { required: false } # kics-scan ignore-line
 
 jobs:
   detect:
@@ -70,7 +70,7 @@ jobs:
             echo "has_dotnet=$([[ -n "$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.csproj' \) -print -quit)" ]] && echo true || echo false)"
             echo "has_cmake=$(check_glob 'CMakeLists.txt')"
             echo "has_conan=$(check_any conanfile.py conanfile.txt)"
-            echo "has_dockerfile=$(check_file ${{ inputs.dockerfile_path }})"
+            echo "has_dockerfile=$(check_file "${{ inputs.dockerfile_path }}")"
             echo "has_mkdocs=$(check_glob 'mkdocs.yml')"
           } >> "$GITHUB_OUTPUT"
 

@@ -78,7 +78,7 @@ jobs:
         run: |
           check_any() { for f in "$@"; do [[ -f "$f" ]] && echo "true" && return; done; echo "false"; }
           {
-            echo "has_dockerfile=$([[ -f ${{ inputs.dockerfile_path }} ]] && echo true || echo false)"
+            echo "has_dockerfile=$([[ -f "${{ inputs.dockerfile_path }}" ]] && echo true || echo false)"
             echo "has_helm=$([[ -f .helmignore ]] && echo true || echo false)"
             echo "has_deploy_intent=$(check_any deploy.yml .codehaven/deploy.yml)"
           } >> "$GITHUB_OUTPUT"

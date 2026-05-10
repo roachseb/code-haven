@@ -36,16 +36,6 @@ jobs:
 
       # Conan remote for cross-project dependencies
       cpp_conan_remote: ${{ vars.CONAN_REMOTE_URL }}
-
-      # Disable unrelated stacks
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 
   # ── Publish Conan package (only on main/tags) ───────────────

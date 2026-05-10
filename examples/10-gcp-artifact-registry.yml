@@ -30,15 +30,6 @@ jobs:
 
       # Docker — push to GHCR (GCP push handled in separate job below)
       docker_registry: 'ghcr.io'
-
-      # Disable unrelated stacks
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 
   # ── Push to GCP Artifact Registry ──────────────────────────

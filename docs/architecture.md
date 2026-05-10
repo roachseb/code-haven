@@ -102,7 +102,7 @@ We use 2 levels, leaving headroom for future composition.
 ## Dog-Fooding 🐕
 
 Code Haven uses its own pipeline to build and deploy itself. The repo's
-[`ci.yml`](https://github.com/code-haven/code-haven/blob/main/.github/workflows/ci.yml)
+[`ci.yml`](https://github.com/roachseb/code-haven/blob/main/.github/workflows/ci.yml)
 calls `devsecops.yml` — the exact same orchestrator every consumer uses.
 
 When the pipeline runs on this repo, the detect step finds `mkdocs.yml` and

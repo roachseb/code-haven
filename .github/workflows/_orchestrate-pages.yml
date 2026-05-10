@@ -39,7 +39,7 @@ jobs:
 
   pages:
     needs: detect
-    if: "!inputs.pages_disabled"
+    if: ${{ !inputs.pages_disabled }}
     uses: ./.github/workflows/_pages.yml
     with:
       runner: ${{ inputs.runner }}

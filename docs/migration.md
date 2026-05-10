@@ -38,4 +38,4 @@ Each template was a small, focused file. The consumer's pipeline inherited all j
 | `$CI_REGISTRY` | `ghcr.io` |
 | `$CI_REGISTRY_IMAGE` | `ghcr.io/${{ github.repository }}` |
 
-For the complete detailed mapping, see [MIGRATION-REPORT.md](https://github.com/code-haven/code-haven/blob/main/MIGRATION-REPORT.md).
+For the complete detailed mapping, see [MIGRATION-REPORT.md](https://github.com/roachseb/code-haven/blob/main/MIGRATION-REPORT.md).

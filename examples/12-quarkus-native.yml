@@ -40,15 +40,6 @@ jobs:
 
       # Docker image (JVM-based by default)
       docker_registry: 'ghcr.io'
-
-      # Disable unrelated stacks
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
-      cpp_disabled: true
     secrets: inherit
 
   # ── Native Build (GraalVM) ─────────────────────────────────
@@ -80,7 +71,7 @@ jobs:
           kill %1
 
       - name: Upload native binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: quarkus-native
           path: target/*-runner

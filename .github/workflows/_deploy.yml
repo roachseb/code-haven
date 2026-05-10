@@ -304,7 +304,7 @@ jobs:
 
       - name: Upload plan artifact
         if: steps.plan.outputs.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: deploy-plan-${{ matrix.environment }}
           path: |

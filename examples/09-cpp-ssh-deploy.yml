@@ -33,16 +33,6 @@ jobs:
 
       # Also build Docker image as alternative deployment
       docker_registry: 'ghcr.io'
-
-      # Disable unrelated stacks
-      maven_disabled: true
-      gradle_disabled: true
-      npm_disabled: true
-      python_disabled: true
-      rust_disabled: true
-      dotnet_disabled: true
-      php_disabled: true
-      golang_disabled: true
     secrets: inherit
 
   # ── Deploy via SSH (only on main branch) ────────────────────

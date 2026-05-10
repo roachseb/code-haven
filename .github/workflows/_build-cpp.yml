@@ -160,7 +160,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cpp-test-results
           path: |
@@ -171,7 +171,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Docker inputs (C++)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-input-cpp
           path: |
@@ -291,7 +291,7 @@ jobs:
 
       - name: Upload lint reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cpp-lint-reports
           path: |
@@ -516,7 +516,7 @@ jobs:
             doxygen Doxyfile.auto
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: cpp-doxygen
