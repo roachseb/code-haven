@@ -78,6 +78,7 @@ jobs:
       has_cargo:        ${{ steps.check.outputs.has_cargo }}
       has_go:           ${{ steps.check.outputs.has_go }}
       has_python:       ${{ steps.check.outputs.has_python }}
+      has_poetry:       ${{ steps.check.outputs.has_poetry }}
       has_dotnet:       ${{ steps.check.outputs.has_dotnet }}
       has_php:          ${{ steps.check.outputs.has_php }}
       has_cmake:        ${{ steps.check.outputs.has_cmake }}
@@ -133,6 +134,7 @@ jobs:
             echo "has_cargo=$(check_file Cargo.lock)"
             echo "has_go=$(check_glob '*.go')"
             echo "has_python=$(check_any setup.py pyproject.toml)"
+            echo "has_poetry=$(check_file poetry.lock)"
             echo "has_dotnet=$([[ -n "$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.csproj' \) -print -quit)" ]] && echo true || echo false)"
             echo "has_php=$(check_glob '*phpunit*')"
             echo "has_cmake=$(check_glob 'CMakeLists.txt')"
@@ -199,6 +201,7 @@ jobs:
     with:
       runner: ${{ inputs.runner }}
       has_python: ${{ needs.detect.outputs.has_python }}
+      has_poetry: ${{ needs.detect.outputs.has_poetry }}
       has_tox: ${{ needs.detect.outputs.has_tox }}
       has_django: ${{ needs.detect.outputs.has_django }}
       has_mkdocs: ${{ needs.detect.outputs.has_mkdocs }}

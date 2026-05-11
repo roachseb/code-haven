@@ -3,16 +3,47 @@
 **Workflow:** [`_build-python.yml`](https://github.com/code-haven/code-haven/blob/main/.github/workflows/_build-python.yml)  
 **Triggered by:** `setup.py` / `pyproject.toml` / `manage.py` / `tox.ini` / `mkdocs.yml`
 
-## Jobs
+## Architecture
+
+Jobs are split by package manager — each path is self-contained, no branching:
+
+### pip jobs (no `poetry.lock`)
 
 | Job | Trigger | Description |
 |-----|---------|-------------|
-| `python-build` | `setup.py` / `pyproject.toml` | Builds package with `python -m build` |
-| `python-test` | After build | pytest with coverage (HTML, XML, markdown summary) |
-| `python-tox` | `tox.ini` / `tox.toml` | Multi-environment testing (multiple Python versions) |
-| `django-test` | `manage.py` | Django test runner with database support |
-| `mkdocs-build` | `mkdocs.yml` | MkDocs Material site build (artifact uploaded for Pages) |
+| `pip-build` | `setup.py` / `pyproject.toml` | `pip install` + `python -m build` |
+| `pip-test` | After build | pytest + coverage |
+| `django-pip-test` | `manage.py` | `python manage.py test` |
+| `mkdocs-pip-build` | `mkdocs.yml` | MkDocs Material site build |
+
+### Poetry jobs (`poetry.lock` present)
+
+| Job | Trigger | Description |
+|-----|---------|-------------|
+| `poetry-build` | `pyproject.toml` + `poetry.lock` | `poetry install` + `poetry build` |
+| `poetry-test` | After build | `poetry run pytest` + coverage |
+| `django-poetry-test` | `manage.py` | `poetry run python manage.py test` |
+| `mkdocs-poetry-build` | `mkdocs.yml` | `poetry run mkdocs build` |
+
+### Shared jobs (any package manager)
+
+| Job | Trigger | Description |
+|-----|---------|-------------|
+| `python-tox` | `tox.ini` / `tox.toml` | Multi-environment testing |
 | `python-deploy` | Tag push (`v*`) | PyPI trusted publishing via OIDC |
+
+## Package Manager Detection
+
+Code Haven auto-detects your Python package manager:
+
+| File present | Tool used | Install command |
+|---|---|---|
+| `poetry.lock` | Poetry | `poetry install` / `poetry build` |
+| `requirements.txt` | pip | `pip install -r requirements.txt` / `python -m build` |
+| Neither | pip | `python -m build` (assumes deps in `pyproject.toml` build-system) |
+
+Only the matching set of jobs runs — never both. No configuration needed,
+just commit your lock file.
 
 ## Configuration
 
@@ -20,6 +51,32 @@
 with:
   python_version: '3.12'
 ```
+
+## Poetry
+
+If `poetry.lock` is present, Code Haven automatically runs the Poetry job
+variants. No extra flags needed.
+
+```toml title="pyproject.toml (Poetry project)"
+[tool.poetry]
+name = "my-app"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+coverage = "^7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+```
+
+Poetry projects work exactly like pip projects — just commit `poetry.lock`
+and Code Haven handles the rest.
 
 ## How testing works
 

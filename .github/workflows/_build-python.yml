@@ -1,6 +1,9 @@
 # ═══════════════════════════════════════════════════════════════
 # Code Haven — Python Build Pipeline
 # Internal reusable workflow — called from devsecops.yml
+#
+# Jobs are split by package manager (pip vs Poetry) so each path
+# is self-contained and easy to extend when new tools appear.
 # ═══════════════════════════════════════════════════════════════
 name: "🐍 Python"
 
@@ -9,6 +12,7 @@ on:
     inputs:
       runner: { type: string, default: 'ubuntu-latest' }
       has_python: { type: string, default: 'false' }
+      has_poetry: { type: string, default: 'false' }
       has_tox: { type: string, default: 'false' }
       has_django: { type: string, default: 'false' }
       has_mkdocs: { type: string, default: 'false' }
@@ -16,10 +20,17 @@ on:
       python_version: { type: string, default: '3.x' }
 
 jobs:
-  # ── Build ────────────────────────────────────────────────
-  python-build:
-    name: "🐍 Python Build"
-    if: inputs.has_python == 'true' && !inputs.python_disabled
+  # ════════════════════════════════════════════════════════════
+  #  pip path — requirements.txt / setup.py / pyproject.toml
+  # ════════════════════════════════════════════════════════════
+
+  # ── Build (pip) ──────────────────────────────────────────
+  pip-build:
+    name: "🐍 pip Build"
+    if: >-
+      inputs.has_python == 'true'
+      && inputs.has_poetry != 'true'
+      && !inputs.python_disabled
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -42,11 +53,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
-  # ── Test ─────────────────────────────────────────────────
-  python-test:
-    name: "🐍 Python Test"
-    needs: python-build
-    if: inputs.has_python == 'true' && !inputs.python_disabled
+  # ── Test (pip) ───────────────────────────────────────────
+  pip-test:
+    name: "🐍 pip Test"
+    needs: pip-build
+    if: >-
+      inputs.has_python == 'true'
+      && inputs.has_poetry != 'true'
+      && !inputs.python_disabled
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -108,6 +122,111 @@ jobs:
           fail-on-error: false
           fail-on-empty: false
 
+  # ════════════════════════════════════════════════════════════
+  #  Poetry path — poetry.lock present
+  # ════════════════════════════════════════════════════════════
+
+  # ── Build (Poetry) ──────────────────────────────────────
+  poetry-build:
+    name: "🐍 Poetry Build"
+    if: >-
+      inputs.has_python == 'true'
+      && inputs.has_poetry == 'true'
+      && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - name: Install & Build
+        run: |
+          pip install --upgrade pip poetry
+          poetry install --no-interaction
+          poetry build
+      - uses: actions/upload-artifact@v5
+        with: { name: python-dist, path: dist, retention-days: 1 }
+      - name: Upload Docker inputs (Python)
+        uses: actions/upload-artifact@v5
+        with:
+          name: docker-input-python
+          path: dist/**
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # ── Test (Poetry) ────────────────────────────────────────
+  poetry-test:
+    name: "🐍 Poetry Test"
+    needs: poetry-build
+    if: >-
+      inputs.has_python == 'true'
+      && inputs.has_poetry == 'true'
+      && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - name: Test with coverage
+        run: |
+          pip install --upgrade pip poetry
+          poetry install --no-interaction --with dev
+          poetry run coverage run -m pytest --junitxml=pytest-report.xml -v || true
+          poetry run coverage html
+          poetry run coverage xml -o coverage.xml
+          {
+            echo "## 🐍 Python Test & Coverage"
+            echo ""
+            echo "> **What this does:** Runs your Python test suite with pytest and measures"
+            echo "> code coverage to show which parts of your code are tested."
+            echo ""
+            TOTAL=$(grep -c '<testcase' pytest-report.xml 2>/dev/null || echo "0")
+            FAILURES=$(grep -c '<failure' pytest-report.xml 2>/dev/null || echo "0")
+            ERRORS=$(grep -c '<error' pytest-report.xml 2>/dev/null || echo "0")
+            FAIL_COUNT=$((FAILURES + ERRORS))
+            if [[ "$FAIL_COUNT" -eq 0 ]]; then
+              echo "- ✅ **${TOTAL}** tests passed"
+            else
+              echo "- ❌ **${FAIL_COUNT}** of **${TOTAL}** tests failed"
+              echo ""
+              echo "#### 🔧 Debug locally"
+              echo '```bash'
+              echo "poetry run pytest -v --tb=short"
+              echo '```'
+            fi
+            echo ""
+            echo "### Coverage"
+            poetry run coverage report --format=markdown 2>/dev/null || echo "- Coverage data unavailable"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: python-coverage
+          path: |
+            htmlcov
+            coverage.xml
+            pytest-report.xml
+          retention-days: 7
+      - uses: dorny/test-reporter@v2
+        if: >-
+          !cancelled() &&
+          (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) &&
+          github.actor != 'dependabot[bot]'
+        continue-on-error: true
+        with:
+          name: Python Tests
+          path: pytest-report.xml
+          reporter: java-junit
+          fail-on-error: false
+          fail-on-empty: false
+
+  # ════════════════════════════════════════════════════════════
+  #  Shared jobs — work with any package manager
+  # ════════════════════════════════════════════════════════════
+
   # ── Tox ──────────────────────────────────────────────────
   python-tox:
     name: "🐍 Python Tox"
@@ -122,10 +241,13 @@ jobs:
       - run: pip install tox
       - run: tox
 
-  # ── Django ───────────────────────────────────────────────
-  django-test:
-    name: "🐍 Django Test"
-    if: inputs.has_django == 'true' && !inputs.python_disabled
+  # ── Django (pip) ─────────────────────────────────────────
+  django-pip-test:
+    name: "🐍 Django Test (pip)"
+    if: >-
+      inputs.has_django == 'true'
+      && inputs.has_poetry != 'true'
+      && !inputs.python_disabled
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -139,10 +261,30 @@ jobs:
           [[ -f requirements.txt ]] && pip install -r requirements.txt || true
           python manage.py test
 
-  # ── MkDocs ──────────────────────────────────────────────
-  mkdocs-build:
-    name: "📚 MkDocs Build"
-    if: inputs.has_mkdocs == 'true'
+  # ── Django (Poetry) ──────────────────────────────────────
+  django-poetry-test:
+    name: "🐍 Django Test (Poetry)"
+    if: >-
+      inputs.has_django == 'true'
+      && inputs.has_poetry == 'true'
+      && !inputs.python_disabled
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      - name: Test
+        run: |
+          pip install --upgrade pip poetry
+          poetry install --no-interaction
+          poetry run python manage.py test
+
+  # ── MkDocs (pip) ─────────────────────────────────────────
+  mkdocs-pip-build:
+    name: "📚 MkDocs Build (pip)"
+    if: inputs.has_mkdocs == 'true' && inputs.has_poetry != 'true'
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -150,19 +292,44 @@ jobs:
         with: { python-version: '3.x', cache: pip }
       - name: Build docs
         run: |
-          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; else pip install mkdocs-material; fi
+          if [[ -f requirements.txt ]]; then
+            pip install -r requirements.txt
+          else
+            pip install mkdocs-material
+          fi
           mkdocs build --strict --verbose --site-dir mkdocs-site
+      - uses: actions/upload-artifact@v5
+        with: { name: mkdocs-site, path: mkdocs-site, retention-days: 7 }
+
+  # ── MkDocs (Poetry) ─────────────────────────────────────
+  mkdocs-poetry-build:
+    name: "📚 MkDocs Build (Poetry)"
+    if: inputs.has_mkdocs == 'true' && inputs.has_poetry == 'true'
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.x', cache: pip }
+      - name: Build docs
+        run: |
+          pip install poetry
+          poetry install --no-interaction
+          poetry run mkdocs build --strict --verbose --site-dir mkdocs-site
       - uses: actions/upload-artifact@v5
         with: { name: mkdocs-site, path: mkdocs-site, retention-days: 7 }
 
   # ── PyPI Publish ─────────────────────────────────────────
   python-deploy:
     name: "🐍 Python Deploy (PyPI)"
-    needs: python-build
+    needs:
+      - pip-build
+      - poetry-build
     if: |
-      inputs.has_python == 'true'
+      always()
+      && inputs.has_python == 'true'
       && !inputs.python_disabled
       && startsWith(github.ref, 'refs/tags/')
+      && (needs.pip-build.result == 'success' || needs.poetry-build.result == 'success')
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/download-artifact@v4
